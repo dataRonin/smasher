@@ -5,17 +5,14 @@ from collections import defaultdict
 import math
 
 def isfloat(string):
-    """ If a float, convert to float and return
-        If cannot be converted, make a None and return
-    """
+    """ From an input, returns either a float or a None """
     try:
         return float(string)
     except Exception:
         return None
 
 def form_connection():
-    """ Connect to the SQL server database - update using safer parameters
-    """
+    """ Connect to the SQL server database - update using safer parameters """
 
     server = "sheldon.forestry.oregonstate.edu:1433"
     user = 'petersonf'
@@ -27,13 +24,15 @@ def form_connection():
 
 
 def get_unique_tables_and_columns(cur):
-    """ get the tables and columns from the information schema that are in LTERLogger_pro for processing
+    """ Get the tables and columns from the information schema of LTERLogger_pro.
+
+    The table names are matched to column names and then both are put into a nested structure so that the headers for each database and entity are in one structure.
     """
 
     sql = "select table_name, column_name from lterlogger_pro.information_schema.columns group by table_name, column_name"
     cur.execute(sql)
 
-    d= {}
+    database_map= {}
 
     bad_strings = ['View_', 'FlagI', 'LastU', 'Test', 'metho', 'View_', 'dtpro',  'tblCo', 'PROBE', 'vwFin', 'CSV2D', 'CSVTa', 'Table', 'vwOne', 'sysdi', 'vwUni']
 
@@ -42,39 +41,40 @@ def get_unique_tables_and_columns(cur):
         # bad strings are a list of table prefixes that don't contain data
         if str(row[0])[0:5] in bad_strings:
             continue
-        if str(row[0])[0:5] not in d:
-            d[str(row[0])[0:5]] = {str(row[0])[5:7].rstrip() : [str(row[1]).rstrip()]}
-        elif str(row[0])[0:5] in d:
-            if str(row[0])[5:7].rstrip() not in d[str(row[0])[0:5]]:
-                d[str(row[0])[0:5]][str(row[0])[5:7].rstrip()] = [str(row[1]).rstrip()]
-            elif str(row[0])[5:7] in d[str(row[0])[0:5]]:
-                d[str(row[0])[0:5]][str(row[0])[5:7]].append(str(row[1]))
+        if str(row[0])[0:5] not in database_map:
+            database_map[str(row[0])[0:5]] = {str(row[0])[5:7].rstrip() : [str(row[1]).rstrip()]}
+        elif str(row[0])[0:5] in database_map:
+            if str(row[0])[5:7].rstrip() not in database_map[str(row[0])[0:5]]:
+                database_map[str(row[0])[0:5]][str(row[0])[5:7].rstrip()] = [str(row[1]).rstrip()]
+            elif str(row[0])[5:7] in database_map[str(row[0])[0:5]]:
+                database_map[str(row[0])[0:5]][str(row[0])[5:7]].append(str(row[1]))
 
-    return d
+    return database_map
 
-def is_daily(d):
-    """ Finds the high-resolution matches to each daily table.
+def is_daily(database_map):
+    """ Finds the high-resolution matches to each daily table and outputs them as a pari.
 
-    The daily key has an HR value mapped to it. Ex. MS043:{'02':'12'}
+    The daily key has an high-resolution value mapped to it. Ex. MS043:{'02':'12'}
     """
     daily_index = {}
 
-    for each_dbcode in d.keys():
-        for each_entity in sorted(d[each_dbcode].keys()):
+    for each_dbcode in database_map.keys():
+        for each_entity in sorted(database_map[each_dbcode].keys()):
 
             # number that we switch to daily
             critical_value = 10
+
             # if the table is less than 10 or between 21 and 30, it might be daily
             if int(each_entity) <= critical_value or (int(each_entity) >= critical_value*2+1 and int(each_entity) <=critical_value*3) or (int(each_entity) >= critical_value*4+1 and int(each_entity) <=critical_value*5) or (int(each_entity) >= critical_value*6+1 and int(each_entity) <=critical_value*7):
 
                 # if at least one value has day in it, test that there is a match between at least one of those keywords and a key in the high resolution data
-                if len([x for x in d[each_dbcode][each_entity] if "_DAY" in x]) > 0:
-                    keywords = [x.rstrip("_DAY") for x in d[each_dbcode][each_entity] if "_DAY" in x]
+                if len([x for x in database_map[each_dbcode][each_entity] if "_DAY" in x]) > 0:
+                    keywords = [x.rstrip("_DAY") for x in database_map[each_dbcode][each_entity] if "_DAY" in x]
                     hr_test_entity = str(int(each_entity) + 10)
 
                     for each_keyword in keywords:
 
-                        if len([x for x in d[each_dbcode][hr_test_entity] if each_keyword in x]) > 0:
+                        if len([x for x in database_map[each_dbcode][hr_test_entity] if each_keyword in x]) > 0:
                             if each_dbcode not in daily_index:
                                 daily_index[each_dbcode] = {each_entity:hr_test_entity}
 
@@ -94,7 +94,9 @@ def is_daily(d):
     return daily_index
 
 def flag_count(flag_list):
-    """ Quickly count flags in a list
+    """ Quickly count flags in a list, outputing a dictionary and an integer of the count.
+
+    The output is like: (<int>, {'x': count(x), 'y': count(y)})
     """
     flag_counter = defaultdict(int)
     for flag in flag_list:
@@ -108,7 +110,9 @@ def daily_flag(flag_counter):
     pass
 
 def drange(start, stop, step):
-    """ Iterate out a nice date range for testing
+    """ Iteration generator for just about anything.
+
+    It will be very useful for date ranges. The step in this case should be of datetime.timedelta variety.
     """
     r = start
     while r <= stop:
@@ -116,10 +120,10 @@ def drange(start, stop, step):
         r+=step
 
 
-def get_a_table(cur, d,  daily_index, hr_methods, daily_methods, db_code, daily_entity, *args):
-    """ Wrap the data processing with a start and end date and map it onto a relevant daily table
-    """
+def select_raw_data(cur, database_map,  daily_index, hr_methods, daily_methods, dbcode, daily_entity, *args):
+    """ Collects the raw data from the database and couples it with methods and information."""
 
+    # For doing the full-year replacements from Adam, we'll need a water year assignment. Otherwise, args will contain start dates and end dates for daily updates.
     this_month = datetime.datetime.now().month
 
     if this_month >= 10:
@@ -139,43 +143,45 @@ def get_a_table(cur, d,  daily_index, hr_methods, daily_methods, db_code, daily_
     else:
         print("no args!")
 
-    # get the entity number of the high resolution match and the columns names that go with it
-    hr_entity = daily_index[db_code][daily_entity]
-    this_data = d[db_code][hr_entity]
+    # get the entity number of the high resolution entity and the columns names that go with it
+    hr_entity = daily_index[dbcode][daily_entity]
+    hr_columns = database_map[dbcode][hr_entity]
 
     # shallow copy of column names from the high resolution - needed to not delete them from the list later
-    initial_column_names = d[db_code][hr_entity][:]
-    daily_columns = d[db_code][daily_entity]
+    initial_column_names = database_map[dbcode][hr_entity][:]
+    daily_columns = database_map[dbcode][daily_entity]
 
-    # check for max columns
+    # check for max columns (not including flag) in the daily columns
     xval = [x for x in daily_columns if 'MAX' in x and 'FLAG' not in x]
-    # remove time column and flag column
+
+    # check for maxtime; remove it if present
     if xval != []:
         xtime = [x for x in xval if 'TIME' in x]
         xval.remove(xtime[0])
     else:
         xtime = []
 
-    # check for min columns
+    # check for min columns (not including flag) in the daily columns
     nval = [x for x in daily_columns if 'MIN' in x and 'FLAG' not in x]
-    # remove time column and flag column
+
+    # check for mintime; remove it if present
     if nval != []:
         ntime = [x for x in nval if 'TIME' in x]
         nval.remove(ntime[0])
     else:
         ntime = []
 
-    # use this variable to tell SQL if it needs to bring in the HR time data or not. This is expensive to do if you don't have to.
+    # use `xt` as a variable to tell SQL if it needs to bring in the high-resolution time data or not. This is expensive to do if you don't have to. True means there is at least 1 time data, false means there is not
     if xtime != [] or ntime != []:
         xt = True
     else:
         xt = False
 
-    mdd, column_names = process_data(cur, db_code, hr_entity, this_data, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
+    raw_data, column_names = process_data(cur, dbcode, hr_entity, hr_columns, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
 
-    daily_means(mdd, column_names, xt)
+    comprehend_daily(raw_data, column_names, xt)
 
-    return mdd, column_names
+    return raw_data, column_names
 
 def sum_if_none(data_list):
     """ Computes a sum even if there are none values
@@ -191,7 +197,7 @@ def len_if_none(data_list):
     try:
         return len([x for x in data_list if x != None])
     except Exception:
-        print "An empty list."
+        print("An empty list.")
         return 0
 
 def mean_if_none(data_list):
@@ -200,7 +206,7 @@ def mean_if_none(data_list):
     try:
         return sum([float(x) for x in data_list if x != 'None' and x != None])/len([x for x in data_list if x != 'None' and x != None])
     except Exception:
-        print "An empty list."
+        print("An empty list.")
         return None
 
 def vpd_if_none(data_list1, datalist2):
@@ -215,10 +221,10 @@ def vap_if_none(datalist1, datalist2):
 
 
 def max_if_none(data_list):
-    """ Computes a length even if there are none values
+    """ Computes a maximum even if there are none values in the data.
     """
     try:
-        return max([flloat(x) for x in data_list if x != None])
+        return max([float(x) for x in data_list if x != None])
     except Exception:
         return None
 
@@ -226,7 +232,7 @@ def min_if_none(data_list):
     """ Computes a length even if there are none values
     """
     try:
-        return min([x for x in data_list if x != None])
+        return min([float(x) for x in data_list if x != None])
     except Exception:
         return None
 
@@ -278,29 +284,37 @@ def wind_std_if_none(dir_list):
 
     return daily_sigma_theta
 
-def daily_flags_and_information(mdd, column_names):
+def daily_flags_and_information(raw_data, column_names):
 
     flag_columns = column_names[:column_names.index('DATE_TIME')]
 
     valid_columns = flag_columns[:]
 
-    data_flags = {p:{dt:{column_name: flag_count(mdd[p][dt][column_name]) for column_name, mdd[p][dt][column_name] in mdd[p][dt].items() if column_name in valid_columns} for dt, mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data_flags = {p:{dt:{column_name: flag_count(raw_data[p][dt][column_name]) for column_name, raw_data[p][dt][column_name] in raw_data[p][dt].items() if column_name in valid_columns} for dt, raw_data[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items()}
 
-    # flag_count(mdd['AIRR1203'][datetime.datetime(2015, 1, 9, 0, 0)]['AIRTEMP_MEAN_FLAG'])
+    # flag_count(raw_data['AIRR1203'][datetime.datetime(2015, 1, 9, 0, 0)]['AIRTEMP_MEAN_FLAG'])
 
-def daily_means(mdd, column_names, xt):
+def comprehend_daily(raw_data, column_names, xt):
+    """ Aggregates the raw data based on column names.
 
+    """
     smashed_data = {}
 
     # data is in the columns following the datetime
     data_columns = column_names[column_names.index('DATE_TIME')+1:]
+
 
     # copy of the column names
     valid_columns = data_columns[:]
 
     is_max = sorted([x for x in data_columns if 'MAX' in x])
     if is_max != []:
-        max_data_from_max = daily_maxes(mdd, is_max, xt)
+
+        try:
+            max_data_from_max, maxtime_from_max = daily_maxes(raw_data, is_max, xt)
+        except Exception:
+            max_data_from_max = daily_maxes(raw_data, is_max, xt)
+
         if len(is_max) == 1:
             max_name = is_max[0]
     for each_column in is_max:
@@ -308,7 +322,7 @@ def daily_means(mdd, column_names, xt):
 
     is_min = sorted([x for x in data_columns if 'MIN' in x])
     if is_min != []:
-        min_data_from_min = daily_mins(mdd, is_min, xt)
+        min_data_from_min = daily_mins(raw_data, is_min, xt)
         if len(is_min) == 1:
             min_name = is_min[0]
     for each_column in is_min:
@@ -326,11 +340,11 @@ def daily_means(mdd, column_names, xt):
     for each_column in is_tot:
         valid_columns.remove(each_column)
 
-    data_mean = {p:{dt:{y:mean_if_none(mdd[p][dt][y]) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in valid_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data_mean = {p:{dt:{y:mean_if_none(raw_data[p][dt][y]) for y, raw_data[p][dt][y] in raw_data[p][dt].items() if y in valid_columns} for dt,raw_data[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items()}
 
-    data_max = {p:{dt:{max_name:max_if_none(mdd[p][dt][y]) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in valid_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data_max = {p:{dt:{max_name:max_if_none(raw_data[p][dt][y]) for y, raw_data[p][dt][y] in raw_data[p][dt].items() if y in valid_columns} for dt,raw_data[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items()}
 
-    data_min = {p:{dt:{min_name:min_if_none(mdd[p][dt][y]) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in valid_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data_min = {p:{dt:{min_name:min_if_none(raw_data[p][dt][y]) for y, raw_data[p][dt][y] in raw_data[p][dt].items() if y in valid_columns} for dt,raw_data[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items()}
 
     # if the data max's value is not none then update it - not working yet
     #data_max.update(p:{dt:{y:max_data_from_max[p][dt][y] for y, max_data_from_max[p][dt][y] in max_data_from_max[p][dt][y].items() if max_data_from_max[p][dt][y] !=None} for dt, max_data_from_max[p][dt] in max_data_from_max[p].items()} for p,max_data_from_max[p] in max_data_from_max.items())
@@ -338,38 +352,47 @@ def daily_means(mdd, column_names, xt):
     import pdb; pdb.set_trace()
 
     # if the data max's value is not none then update it - not working yet
-    #data_min.update(p:{dt:{y:v for y, v in min_data_from_min[p][dt][y].items() if v !=None} for y, min_data_from_min[p][dt][y] for dt, min_data_from_min[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items())
+    #data_min.update(p:{dt:{y:v for y, v in min_data_from_min[p][dt][y].items() if v !=None} for y, min_data_from_min[p][dt][y] for dt, min_data_from_min[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items())
 
-    data_sums = {each_probe:{dt:sum_if_none(mdd[each_probe][dt][y]) for each_probe in mdd.keys() for dt in mdd[each_probe].keys() for y in is_tot}}
+    data_sums = {each_probe:{dt:sum_if_none(raw_data[each_probe][dt][y]) for each_probe in raw_data.keys() for dt in raw_data[each_probe].keys() for y in is_tot}}
 
 
     pass
 
-def daily_maxes(mdd, is_max, xt):
+def daily_maxes(raw_data, is_max, xt):
+    """ Computes the maximums from the raw_data inputs for each probe, date_time, and attribute that needs a maximum computed.
+
+    p is the probe
+    """
 
     # data is in the columns following the datetime
     data_columns = [x for x in is_max if 'TIME' not in x]
 
-    data = {p:{dt:{y:max_if_none(mdd[p][dt][y]) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in data_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data = {each_probe:{dt:{each_attribute: max_if_none(raw_data[each_probe][dt][each_attribute]) for each_attribute, raw_data[each_probe][dt][y] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
 
 
     if xt != True:
-
-        data2 = {p:{dt:{y:(max_if_none(mdd[p][dt][y]),mdd[p][dt]['date_time']) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in data_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+        print("no max time present")
         return data
 
     elif xt == True:
-        print("xt is true")
 
-    return data
-    pass
+        print("max time must be computed")
 
-def daily_mins(mdd, is_min, xt):
+        try:
+            data2 = {each_probe:{dt:{each_attribute: max_if_none(zip(raw_data[each_probe][dt][each_attribute], raw_data[each_probe][dt]['date_time']))[1] for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
+
+        except Exception:
+            data2 = {each_probe:{dt:{each_attribute: None for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
+
+        return data, data2
+
+def daily_mins(raw_data, is_min, xt):
 
     # data is in the columns following the datetime
     data_columns = [x for x in is_min if 'TIME' not in x]
 
-    data = {p:{dt:{y:min_if_none(mdd[p][dt][y]) for y, mdd[p][dt][y] in mdd[p][dt].items() if y in data_columns} for dt,mdd[p][dt] in mdd[p].items()} for p, mdd[p] in mdd.items()}
+    data = {p:{dt:{y:min_if_none(raw_data[p][dt][y]) for y, raw_data[p][dt][y] in raw_data[p][dt].items() if y in data_columns} for dt,raw_data[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items()}
 
 
     if xt != True:
@@ -379,15 +402,15 @@ def daily_mins(mdd, is_min, xt):
         print("xt is true")
 
     return data
+
+
+def wind_pro(raw_data, column_names):
     pass
 
-def wind_pro(mdd, column_names):
+def wind_snc(raw_data, column_names):
     pass
 
-def wind_snc(mdd, column_names):
-    pass
-
-def vpd(mdd, column_names):
+def vpd(raw_data, column_names):
     pass
 
 
@@ -485,11 +508,11 @@ def process_data(cur, db_code, hr_entity, this_data, initial_column_names, hr_me
 
 
             # this is the daily method :)
-            daily_data[probe_code]={adjusted_date:{is_method:this_method['method_code'], 'critical_flag': this_method['critical_flag'], 'critical_value':this_method['critical_value']}}
+            daily_data[probe_code]={adjusted_date:{is_method:this_method['method_code'], 'critical_flag': this_method['critical_flag'], 'critical_value':this_method['critical_value'],'height': this_method['height'], 'depth': this_method['depth'], 'sitecode':this_method['sitecode']}}
 
 
-            print ("KEYS ADDED SO FAR TO DAILY DATA:")
-            print daily_data.keys()
+            print("KEYS ADDED SO FAR TO DAILY DATA:")
+            print(daily_data.keys())
 
             # put the values in - first the flags
             daily_data[probe_code][adjusted_date].update({x:[str(row[2+i])] for i,x in enumerate(column_names[2:date_position])})
@@ -514,7 +537,7 @@ def process_data(cur, db_code, hr_entity, this_data, initial_column_names, hr_me
                     #  find the first method that fits where we are within the range of the dates
                     this_method = [hr_methods[probe_code][x] for x in sorted(hr_methods[probe_code].keys()) if adjusted_date_time < hr_methods[probe_code][x]['dte'] and adjusted_date_time >= hr_methods[probe_code][x]['dtb']]
 
-                daily_data[probe_code].update({adjusted_date:{is_method:this_method['method_code'], 'critical_flag':this_method['critical_flag'], 'critical_value':this_method['critical_value']}})
+                daily_data[probe_code].update({adjusted_date:{is_method:this_method['method_code'], 'critical_flag':this_method['critical_flag'], 'critical_value':this_method['critical_value'], 'height': this_method['height'], 'depth': this_method['depth'], 'sitecode':this_method['sitecode']}})
 
                 # put the values in
                 daily_data[probe_code][adjusted_date].update({x:[str(row[2+i])] for i,x in enumerate(column_names[2:date_position])})
@@ -551,7 +574,9 @@ def update_daily(daily_columns):
     pass
 
 def get_methods_for_all_probes(cur, *sd):
-    """ Assign a default to make sure that it can be imported if necessary..
+    """ Creates hr_methods and daily_methods dictionaries to reference when importing raw data.
+
+    The method tables tell us which flags to use for various resolutions.
     """
 
     hr_methods = defaultdict(lambda: {0:{'sitecode':'XXXXXX', 'method_code':'XXXXXX','dtb': datetime.datetime(9,9,9,9,9,9), 'dte': datetime.datetime(9999,9,9,9,9,9), 'height':9, 'depth':0, 'resolution': 'None', 'critical_flag':'A', 'critical_value': 287}})
@@ -591,6 +616,7 @@ def get_methods_for_all_probes(cur, *sd):
             critical_value = 287
 
         if str(row[1]).rstrip() not in hr_methods.keys():
+            # sometimes there is more than one method, so the counter is used to index them in order of their starting dates
             counter = 0
 
             hr_methods[str(row[1]).rstrip()] = {counter: {'sitecode': str(row[0]).rstrip(), 'dtb': datetime.datetime.strptime(str(row[2]), '%Y-%m-%d %H:%M:%S'), 'dte': datetime.datetime.strptime(str(row[3]),'%Y-%m-%d %H:%M:%S'), 'method_code' : str(row[4]).rstrip(), 'resolution': str(row[5]).rstrip(), 'height': str(row[6]).rstrip(), 'depth': str(row[7]).rstrip(), 'critical_flag': critical_flag, 'critical_value': critical_value}}
@@ -622,19 +648,19 @@ def get_methods_for_all_probes(cur, *sd):
 if __name__ == "__main__":
 
     conn, cur = form_connection()
-    database = get_unique_tables_and_columns(cur)
-    daily_index = is_daily(database)
+    database_map = get_unique_tables_and_columns(cur)
+    daily_index = is_daily(database_map)
     hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
+    ## this simulates some possible inputs we might see
     desired_database = 'MS005'
     desired_daily_entity = '01'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
-    mdd, column_names = get_a_table(cur, database, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
+    # returns are the names of the columns in the
+    raw_data, column_names = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
     import pdb; pdb.set_trace()
-    means_for_one_day(mdd, hxt, hnt, xval, nval, column_names)
-
 
     print("hi")
