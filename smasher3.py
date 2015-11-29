@@ -858,7 +858,7 @@ def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_dat
     is_method = [x for x in daily_columns if 'METHOD' in x][0]
 
     for each_probe in raw_data.keys():
-        for dt in raw_data[each_probe][dt].keys()
+        for dt in raw_data[each_probe].keys():
             smashed_data[each_probe][dt].update({'DBCODE': dbcode})
             smashed_data[each_probe][dt].update({'ENTITY': daily_entity})
             smashed_data[each_probe][dt].update({'SITECODE': raw_data[each_probe][dt]['site_code']})
