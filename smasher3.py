@@ -140,7 +140,7 @@ def daily_flag(flag_counter, critical_value, critical_flag):
     elif flag_counter['Q'] + flag_counter['E'] + flag_counter['M'] > 0.05:
         return 'Q'
     else:
-        return critical_value
+        return critical_flag
 
 def drange(start, stop, step):
     """ Generates an iterator over any sort of range, such as dates or decimals.
@@ -151,7 +151,6 @@ def drange(start, stop, step):
     while r <= stop:
         yield r
         r+=step
-
 
 def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, dbcode, daily_entity, *args):
     """ Collects the raw data from the database and couples it with information from the method_history and method_history_daily entities in LTERLogger_new.
@@ -224,12 +223,12 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
         xt = False
 
     # gather the raw data and return it
-    raw_data, column_names = process_data(cur, dbcode, hr_entity, hr_columns, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
+    raw_data, column_names = process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
 
     return raw_data, column_names, daily_columns, xt, smashed_template
 
 
-def process_data(cur, dbcode, hr_entity, this_data, initial_column_names, hr_methods, daily_methods, sd, ed, xt):
+def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily_methods, sd, ed, xt):
     """ Bring in the high-resolution data from SQL server.
 
     The column_names array is initialized to build an ordered query from the server. Flag columns precede the date column which is followed by numerical columns. The first two columns are method and probe code. As columns are selected from a copy of the `initial_column_names` list and moved into `column_names`, they are deleted from `initial_column_names`.
@@ -548,62 +547,9 @@ def daily_flags_and_information(raw_data, column_names, smashed_template):
     for each_probe in smashed_data.keys():
         for dt in smashed_data[each_probe].keys():
 
-            smashed_data[each_probe][dt].update({column_name: daily_flag(data_flags[each_probe][dt][column_name], raw_data[each_probe][dt]['critical_value'],raw_data[each_probe][dt]['critical_flag']) for column_name, data_flags[each_probe][dt][column_name] in data_flags[each_probe][dt].items()})
+            smashed_data[each_probe][dt].update({column_name: daily_flag(data_flags[each_probe][dt][column_name], raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for column_name, data_flags[each_probe][dt][column_name] in data_flags[each_probe][dt].items()})
 
     return smashed_data
-
-# def daily_maxes(raw_data, max_column_list, xt):
-#     """ Computes the maximums from the raw_data inputs for each probe, date_time, and attribute that needs a maximum computed.
-
-#     when using the data from a five minute max, the second argument will be called `max_column_list`
-
-#     each_probe iterates over a list of probes; each_attribute iterates over a list of attributes (such as `AIRTEMP_MEAN`)
-#     """
-
-#     # data is in the columns following the datetime
-#     data_columns = [x for x in max_column_list if 'TIME' not in x]
-
-#     data = {each_probe: {dt: {each_attribute: {'max_data': max_if_none(raw_data[each_probe][dt][each_attribute])} for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
-
-
-#     if xt != True:
-#         print("no `MAXTIME` present")
-#         data2 = {}
-
-#         return data, data2
-
-#     elif xt == True:
-
-#         data2 = {}
-#         print("`MAXTIME` must be computed")
-
-#         for each_probe in raw_data.keys():
-#             for dt in raw_data[each_probe].keys():
-#                 for each_attribute in raw_data[each_probe][dt].keys():
-
-#                     if each_attribute not in data_columns:
-#                         continue
-
-#                     try:
-#                         maxtime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(max_if_none(raw_data[each_probe][dt][each_attribute])))]
-#                     except Exception:
-#                         maxtime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(max_if_none(raw_data[each_probe][dt][each_attribute]))]
-
-#                     if each_probe not in data2.keys():
-#                         data2[each_probe] = {dt:{each_attribute:{'maxtime':maxtime}}}
-
-#                     elif each_probe in data2.keys():
-
-#                         if dt not in data2[each_probe].keys():
-#                             data2[each_probe][dt] = {each_attribute:{'maxtime': maxtime}}
-#                         elif dt in data2[each_probe].keys():
-#                             if each_attribute not in data2[each_probe][dt].keys():
-#                                 data2[each_probe][dt][each_attribute] = {'maxtime': maxtime}
-#                             elif each_attribute in data2[each_probe][dt][each_attribute].keys():
-#                                 print("error in adding the new data")
-#                                 import pdb; pdb.set_trace()
-
-#        return data, data2
 
 def daily_functions(raw_data, column_list, function_choice, xt):
     """ Computes the daily aggregaations from the raw_data inputs for each probe, date_time, and attribute that needs a minimum computed. The function choice is passed in an an attribute given to it.
@@ -613,228 +559,160 @@ def daily_functions(raw_data, column_list, function_choice, xt):
     function_choice is either min_if_none, max_if_none, sum_if_none
     """
 
-    function_map = {min_if_none:'min_data', max_if_none:'max_data', sum_if_none:'total_data', mean_if_none:'mean_data', vpd_if_none: 'vpd_data', satvp_if_none: 'satvp_data', vap_if_non: 'vap_data'}
-
     # data is in the columns following the datetime
     data_columns = [x for x in column_list if 'TIME' not in x]
 
-    data = {each_probe:{dt:{each_attribute: {'min_data': min_if_none(raw_data[each_probe][dt][each_attribute])} for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
+    data = {each_probe:{dt:{each_attribute: function_choice(raw_data[each_probe][dt][each_attribute]) for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
 
-
-    if xt != True:
-        print("no `MINTIME` needed")
+    if function_choice != min_if_none and function_choice != max_if_none:
         data2 = {}
 
         return data, data2
 
-    elif xt == True:
+    else:
 
-        data2 = {}
-        print("`MINTIME` must be computed")
+        if xt != True:
+            data2 = {}
 
-        for each_probe in raw_data.keys():
-            for dt in raw_data[each_probe].keys():
-                for each_attribute in raw_data[each_probe][dt].keys():
+            return data, data2
 
-                    if each_attribute not in data_columns:
-                        continue
+        elif xt == True:
+            data2 = {}
 
-                    try:
-                        mintime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(min_if_none(raw_data[each_probe][dt][each_attribute])))]
-                    except Exception:
-                        mintime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(min_if_none(raw_data[each_probe][dt][each_attribute]))]
+            # for each probe, date, and attribute, if that column is not in the column listing, pass over it
+            for each_probe in raw_data.keys():
+                for dt in raw_data[each_probe].keys():
+                    for each_attribute in raw_data[each_probe][dt].keys():
+                        new_attribute_name = each_attribute + "TIME"
+                        if each_attribute not in data_columns:
+                            continue
 
-                    if each_probe not in data2.keys():
-                        data2[each_probe] = {dt:{each_attribute:{'mintime':mintime}}}
+                        try:
+                            function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(function_choice(raw_data[each_probe][dt][each_attribute])))]
+                        except Exception:
+                            function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(function_choice(raw_data[each_probe][dt][each_attribute]))]
 
-                    elif each_probe in data2.keys():
+                        if each_probe not in data2.keys():
+                            data2[each_probe] = {dt:{new_attribute_name: function_time}}
 
-                        if dt not in data2[each_probe].keys():
-                            data2[each_probe][dt] = {each_attribute:{'mintime': mintime}}
-                        elif dt in data2[each_probe].keys():
-                            if each_attribute not in data2[each_probe][dt].keys():
-                                data2[each_probe][dt][each_attribute] = {'mintime':mintime}
-                            elif each_attribute in data2[each_probe][dt][each_attribute].keys():
-                                print("error in adding the new data")
-                                import pdb; pdb.set_trace()
+                        elif each_probe in data2.keys():
+                            if dt not in data2[each_probe].keys():
+                                data2[each_probe][dt] = {new_attribute_name: function_time}
+                            elif dt in data2[each_probe].keys():
+                                if new_attribute_name not in data2[each_probe][dt].keys():
+                                    data2[each_probe][dt][new_attribute_name] = function_time
+                                elif new_attribute_name in data2[each_probe][dt][new_attribute_name].keys():
+                                    print("error in adding the new data")
+                                    import pdb; pdb.set_trace()
 
         return data, data2
 
+def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, extrema_key="_MIN"):
+    """ Performs the min or max iteration over the min/max data and possibly also the time, replacing None with mean when possible.
+    """
 
-        def daily_mins(raw_data, min_column_list, xt):
-            """ Computes the minimums from the raw_data inputs for each probe, date_time, and attribute that needs a minimum computed.
+    for each_probe in extrema_data_from_extrema.keys():
+        for dt in extrema_data_from_extrema[each_probe].keys():
+            for each_min_attribute in is_min:
+                keyword = each_min_attribute.rstrip(extrema_key)
+                matching_attribute = [x for x in valid_columns if keyword in x]
 
-            when using the data from a 5 minute minimum, the second attribute will be called `column_list`
+                if len(matching_attribute) != 1:
+                    import pdb; pdb.set_trace()
+                else:
+                    matching_attribute = matching_attribute[0]
 
-            p is the probe
-            """
+                extrema_data_from_extrema[each_probe][dt].update({each_min_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrema_data_from_mean[each_probe][dt][matching_attribute] in extrema_data_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][each_min_attribute] == None})
 
-            # data is in the columns following the datetime
-            data_columns = [x for x in min_column_list if 'TIME' not in x]
+                # if extrema time is needed, and there is a mean time
+                if xt != [] and extrematime_from_mean != {}:
 
-            data = {each_probe:{dt:{each_attribute: {'min_data': min_if_none(raw_data[each_probe][dt][each_attribute])} for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
+                    extrematime_attribute = keyword + extrema_key+"TIME"
+                    matching_attribute = matching_attribute+"TIME"
 
+                    if each_probe not in extrematime_from_extrema.keys():
+                        extrematime_from_extrema[each_probe]= {dt:{extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items()} for dt, extrematime_from_mean[each_probe][dt] in extrematime_from_mean[each_probe].items()}
 
-            if xt != True:
-                print("no `MINTIME` needed")
-                data2 = {}
+                    elif each_probe in extrematime_from_extrema.keys():
 
-                return data, data2
+                        if dt not in extrematime_from_extrema[each_probe].keys():
+                            extrematime_from_extrema[each_probe][dt]={extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items()}}
 
-            elif xt == True:
+                        elif dt in extrematime_from_extrema[each_probe][dt]:
+                            if extrematime_attribute not in extrematime_from_extrema[each_probe][dt].keys():
+                                extrematime_from_extrema[each_probe][dt]={extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items() if extrematime_from_extrema[each_probe][dt][extrematime_attribute] == None}
+                            elif extrematime_attribute in extrematime_from_extrema[each_probe][dt].keys():
+                                extrematime_from_extrema[each_probe][dt][extrematime_attribute]={extrematime_from_mean[each_probe][dt][matching_attribute] if extrematime_from_extrema[each_probe][dt][extrematime_attribute] == None}
+                elif xt == []:
+                    pass
 
-                data2 = {}
-                print("`MINTIME` must be computed")
+    return extrema_data_from_extrema, extrema_time_from_extrema
 
-                for each_probe in raw_data.keys():
-                    for dt in raw_data[each_probe].keys():
-                        for each_attribute in raw_data[each_probe][dt].keys():
-
-                            if each_attribute not in data_columns:
-                                continue
-
-                            try:
-                                mintime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(min_if_none(raw_data[each_probe][dt][each_attribute])))]
-                            except Exception:
-                                mintime = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(min_if_none(raw_data[each_probe][dt][each_attribute]))]
-
-                            if each_probe not in data2.keys():
-                                data2[each_probe] = {dt:{each_attribute:{'mintime':mintime}}}
-
-                            elif each_probe in data2.keys():
-
-                                if dt not in data2[each_probe].keys():
-                                    data2[each_probe][dt] = {each_attribute:{'mintime': mintime}}
-                                elif dt in data2[each_probe].keys():
-                                    if each_attribute not in data2[each_probe][dt].keys():
-                                        data2[each_probe][dt][each_attribute] = {'mintime':mintime}
-                                    elif each_attribute in data2[each_probe][dt][each_attribute].keys():
-                                        print("error in adding the new data")
-                                        import pdb; pdb.set_trace()
-
-                return data, data2
-
-def comprehend_daily(raw_data, column_names, daily_columns, xt):
+def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     """ Aggregates the raw data based on column names.
 
     """
 
-    import pdb; pdb.set_trace()
-
-    ### HERE TRY TO PRE-POPULATE WITH DAILY SUFFIXES!
-    smashed_data = {}
+    temporary_smash = {}
 
     # data is in the columns following the datetime
     data_columns = column_names[column_names.index('DATE_TIME')+1:]
 
-    # copy of the column names
+    # copy of the column names - these are ultimately all the columns we can "mean"
     valid_columns = data_columns[:]
 
     # find if there is a maximum column or more in x
     is_max = sorted([x for x in data_columns if 'MAX' in x])
 
-    # if max isn't empty, compute max first from the max column
-    if is_max != []:
-        max_data_from_max, maxtime_from_max = daily_maxes(raw_data, is_max, xt)
-
-        if len(is_max) == 1:
-            max_name = is_max[0]
-        else:
-            print("more than one maximum exists")
-            import pdb; pdb.set_trace()
-
-        for each_column in is_max:
-            valid_columns.remove(each_column)
+    for each_column in is_max:
+        valid_columns.remove(each_column)
 
     # find out if there is a minimum column
     is_min = sorted([x for x in data_columns if 'MIN' in x])
 
-    # if min isn't empty, compute min first from the min column
-    if is_min != []:
-        min_data_from_min, mintime_from_min = daily_mins(raw_data, is_min, xt)
+    for each_column in is_min:
+        valid_columns.remove(each_column)
 
-        if len(is_min) == 1:
-            min_name = is_min[0]
-
-        for each_column in is_min:
-            valid_columns.remove(each_column)
-
+    # if it contains propellor anemometer it should say 'PRO' - but wind speed pro is just a mean
     is_windpro = [x for x in data_columns if 'PRO' in x and 'SPD' not in x]
+
     for each_column in is_windpro:
         valid_columns.remove(each_column)
 
+    # if it contains sonic, it should say 'SNC' -- but spd is just a mean
     is_windsnc = [x for x in data_columns if 'SNC' in x and 'SPD' not in x]
+
     for each_column in is_windsnc:
         valid_columns.remove(each_column)
 
+    # if it says 'TOT' its a total
     is_tot = [x for x in data_columns if 'TOT' in x]
+
     for each_column in is_tot:
         valid_columns.remove(each_column)
 
-    # if everything else is removed, now we want to get the mean.
-    data_mean = {each_probe:{dt:{each_attribute: mean_if_none(raw_data[each_probe][dt][each_attribute]) for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute in data_columns} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
-
-    # if there's only one mean-type column, that is what should be used for the max. if there's more than one, we need to find a way to fix it (Not sure how yet.)
-    if len(valid_columns) == 1:
-        mean_name = valid_columns[0]
-    else:
-        print("there is still more than one valid_column!")
-        print("computing from the mean columns")
-
-    # put the mean data into the smashed -- it's just a basic copy.
-    smashed_data = data_mean
-
-    # now add back in the other data:
-
-    # compute a max from the mean
-    max_data_from_mean, maxtime_from_mean = daily_maxes(raw_data, valid_columns, xt)
-
-    import pdb; pdb.set_trace()
+    # if max isn't empty, compute max and possibly max time
     if is_max != []:
-        for each_probe in max_data_from_max.keys():
-            for dt in max_data_from_max[each_probe].keys():
-                for each_attribute in max_data_from_max[each_probe][dt].keys():
+        max_data_from_mean, maxtime_from_mean = daily_functions(raw_data, valid_columns, max_if_none, xt)
+        max_data_from_max, maxtime_from_max = daily_functions(raw_data, is_max, max_if_none, xt)
 
-                    if max_data_from_max[each_probe][dt][each_attribute]['max_data'] == None:
-                        # if the max data is none, replace with max from the mean
-                        final_maxvalue = max_data_from_mean[each_probe][dt][mean_name]['max_data']
+        # use the extrema function to replace the maxes with the means when they are none
+        max_data_from_max, maxtime_from_max = matching_max_or_max(max_data_from_max, max_data_from_mean, maxtime_from_max, maxtime_from_mean, xt, extrema_key="_MAX")
 
-                        # if we need a max because it's also missing, get from the mean data
-                        if xt != False:
-
-                            final_maxtime = maxtime_from_mean[each_probe][dt][mean_name]['maxtime']
-
-                            # put the time back if it needs to go back
-                            if each_attribute not in smashed_data[each_probe][dt].keys():
-                                smashed_data[each_probe][dt].update({each_attribute + "TIME": final_maxtime})
-                        else:
-                            pass
-                    else:
-                        pass
-
-                # put the max back, if it needs to go back
-                if each_attribute not in smashed_data[each_probe][dt].keys():
-                    smashed_data[each_probe][dt].update({each_attribute:final_maxvalue})
-
-
-    import pdb; pdb.set_trace()
-
+    # if min isn't empty, compute min and possibly min time
     if is_min != []:
 
-        min_data_from_mean, mintime_from_mean = daily_mins(raw_data, valid_columns, xt)
+        min_data_from_mean, mintime_from_mean = daily_functions(raw_data, valid_columns, min_if_none, xt)
+        min_data_from_min, mintime_from_min = daily_functions(raw_data, is_min, min_if_none, xt)
 
+        # use the extrema function to replace the min with means when they are none
+        min_data_from_min, mintime_from_min = matching_min_or_max(min_data_from_min, min_data_from_mean, mintime_from_min, mintime_from_mean, xt, extrema_key="_MIN")
 
-
+    # if the mean isn't empty, mean from mean - will still show all the decimals
+    if valid_columns != []:
+        mean_data_from_mean, _ = daily_functions(raw_data, valid_columns, mean_if_none, xt)
 
     import pdb; pdb.set_trace()
-
-    # if the data max's value is not none then update it - not working yet
-    #max_data_from_max.update({each_probe:{dt:{is_max: max_data_from_max[each_probe][dt][y] for y, max_data_from_max[each_probe][dt][y] in max_data_from_max[each_probe][dt][y].items() if max_data_from_max[each_probe][dt][y] !=None} for dt, max_data_from_max[each_probe][dt] in max_data_from_max[each_probe].items()} for each_probe, max_data_from_max[each_probe] in max_data_from_max.items()})
-
-
-    # if the data max's value is not none then update it - not working yet
-    #data_min.update(p:{dt:{y:v for y, v in min_data_from_min[p][dt][y].items() if v !=None} for y, min_data_from_min[p][dt][y] for dt, min_data_from_min[p][dt] in raw_data[p].items()} for p, raw_data[p] in raw_data.items())
-
     data_sums = {each_probe:{dt:sum_if_none(raw_data[each_probe][dt][y]) for each_probe in raw_data.keys() for dt in raw_data[each_probe].keys() for y in is_tot}}
 
 
@@ -851,7 +729,7 @@ def vpd(raw_data, column_names):
 
 
 def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_data):
-    """ Gets the daily information about the smashed_data from the condensed flags and updates it
+    """ Gets the daily information about the smashed_data from the condensed flags and updates it.
     """
 
     is_probe = [x for x in daily_columns if 'PROBE' in x][0]
@@ -861,17 +739,17 @@ def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_dat
         for dt in raw_data[each_probe].keys():
             smashed_data[each_probe][dt].update({'DBCODE': dbcode})
             smashed_data[each_probe][dt].update({'ENTITY': daily_entity})
-            smashed_data[each_probe][dt].update({'SITECODE': raw_data[each_probe][dt]['site_code']})
-            smashed_data[each_probe][dt].update({'DATE': datetime.datetime.strftime(dt, '%Y-%m-%d %H:%M:%S'})
+            smashed_data[each_probe][dt].update({'SITECODE': raw_data[each_probe][dt]['sitecode']})
+            smashed_data[each_probe][dt].update({'DATE': datetime.datetime.strftime(dt, '%Y-%m-%d %H:%M:%S')})
             smashed_data[each_probe][dt].update({'EVENT_CODE': 'NA'})
             smashed_data[each_probe][dt].update({'DB_TABLE': 'NOT_APPLICABLE'})
             smashed_data[each_probe][dt].update({'QC_LEVEL': '1P'})
-            smashed_data[each_probe][dt].update({is_method: raw_data[each_probe][dt]['method_code']})
+            smashed_data[each_probe][dt].update({is_method: raw_data[each_probe][dt][is_method]})
 
             if 'HEIGHT' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt].update({is_method: raw_data[each_probe][dt]['height'])
+                smashed_data[each_probe][dt].update({'HEIGHT': raw_data[each_probe][dt]['height']})
             elif 'DEPTH' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt].update({is_method: raw_data[each_probe][dt]['depth'])
+                smashed_data[each_probe][dt].update({'DEPTH': raw_data[each_probe][dt]['depth']})
             else:
                 pass
 
@@ -973,6 +851,9 @@ if __name__ == "__main__":
     smashed_data_out = daily_flags_and_information(raw_data, column_names, smashed_template)
 
     smashed_data_out = daily_information(smashed_data_out, desired_database, desired_daily_entity, daily_columns, raw_data)
+
+    comprehend_daily(smashed_data_out, raw_data, column_names, daily_columns, xt)
+    #process_data(cur, desired_database, hr_entity, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
     import pdb; pdb.set_trace()
 
     print("hi")
