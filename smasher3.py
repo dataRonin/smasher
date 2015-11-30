@@ -638,7 +638,7 @@ def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extre
 
         new_extrema_data={each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_data_from_mean[each_probe][dt][matching_attribute[i]] in extrema_data_from_mean[each_probe][dt].items()} for dt, extrema_data_from_mean[each_probe][dt] in extrema_data_from_mean[each_probe].items()} for each_probe, extrema_data_from_mean[each_probe] in extrema_data_from_mean.items()}
 
-        extrema_data_from_extrema.update({each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_from_mean[each_probe][dt][matching_attribute[i]] in extrema_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, extrema_from_mean[each_probe][dt] in extrema_from_mean[each_probe].items()} for each_probe, extrema_from_mean[each_probe] in extrema_from_mean.items()})
+        extrema_data_from_extrema.update({each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_data_from_mean[each_probe][dt][matching_attribute[i]] in extrema_data_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, extrema_data_from_mean[each_probe][dt] in extrema_data_from_mean[each_probe].items()} for each_probe, extrema_data_from_mean[each_probe] in extrema_data_from_mean.items()})
 
     return extrema_data_from_extrema, extrematime_from_extrema
 
