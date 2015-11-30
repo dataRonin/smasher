@@ -289,6 +289,7 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
 
     cur.execute(sql)
 
+
     # output of the daily data for each probe will go here:
     raw_data = {}
 
@@ -607,46 +608,39 @@ def daily_functions(raw_data, column_list, function_choice, xt):
 
         return data, data2
 
-def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, extrema_key="_MIN"):
+def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, column_names, valid_columns, extrema_key="_MIN"):
     """ Performs the min or max iteration over the min/max data and possibly also the time, replacing None with mean when possible.
     """
 
-    for each_probe in extrema_data_from_extrema.keys():
-        for dt in extrema_data_from_extrema[each_probe].keys():
-            for each_min_attribute in is_min:
-                keyword = each_min_attribute.rstrip(extrema_key)
-                matching_attribute = [x for x in valid_columns if keyword in x]
+    import pdb; pdb.set_trace()
 
-                if len(matching_attribute) != 1:
-                    import pdb; pdb.set_trace()
-                else:
-                    matching_attribute = matching_attribute[0]
+    extrema_attribute_keys = [x.rstrip(extrema_key) for x in column_names]
 
-                extrema_data_from_extrema[each_probe][dt].update({each_min_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrema_data_from_mean[each_probe][dt][matching_attribute] in extrema_data_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][each_min_attribute] == None})
+    #airtemp_
+    for keyword in extrema_attribute_keys:
+        #[airtemp_mean]
+        matching_attribute = [x for x in valid_columns if keyword in x]
 
-                # if extrema time is needed, and there is a mean time
-                if xt != [] and extrematime_from_mean != {}:
+    if xt == True:
+        extrematime_attribute = [x+"TIME" for x in column_names]
+        matching_time_attribute = [x+"TIME" for x in matching_attribute]
 
-                    extrematime_attribute = keyword + extrema_key+"TIME"
-                    matching_attribute = matching_attribute+"TIME"
+        for i,each_attribute in enumerate(extrematime_attribute):
 
-                    if each_probe not in extrematime_from_extrema.keys():
-                        extrematime_from_extrema[each_probe]= {dt:{extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items()} for dt, extrematime_from_mean[each_probe][dt] in extrematime_from_mean[each_probe].items()}
+            # THIS SHIT WORKS TO GET THE DATA OUT OF THE MEAN!!!!!!!!
+            new_extrematime_data={each_probe:{dt:{each_attribute: extrematime_from_mean[each_probe][dt][matching_time_attribute[i]] for matching_time_attribute[i], extrematime_from_mean[each_probe][dt][matching_time_attribute[i]] in extrematime_from_mean[each_probe][dt].items()} for dt, extrematime_from_mean[each_probe][dt] in extrematime_from_mean[each_probe].items()} for each_probe, extrematime_from_mean[each_probe] in extrematime_from_mean.items()}
 
-                    elif each_probe in extrematime_from_extrema.keys():
+            extrematime_from_extrema.update({each_probe:{dt:{each_attribute: new_extrematime_data[each_probe][dt][each_attribute] for each_attribute, new_extrematime_data[each_probe][dt][each_attribute] in new_extrematime_data[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, new_extrematime_data[each_probe][dt] in new_extrematime_data[each_probe].items()} for each_probe, new_extrematime_data[each_probe] in new_extrematime_data.items()})
+    else:
+        pass
 
-                        if dt not in extrematime_from_extrema[each_probe].keys():
-                            extrematime_from_extrema[each_probe][dt]={extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items()}}
+    for i, each_attribute in enumerate(column_names):
 
-                        elif dt in extrematime_from_extrema[each_probe][dt]:
-                            if extrematime_attribute not in extrematime_from_extrema[each_probe][dt].keys():
-                                extrematime_from_extrema[each_probe][dt]={extrematime_attribute: extrematime_from_mean[each_probe][dt][matching_attribute] for matching_attribute, extrematime_from_mean[each_probe][dt][matching_attribute] in extrematime_from_mean[each_probe][dt].items() if extrematime_from_extrema[each_probe][dt][extrematime_attribute] == None}
-                            elif extrematime_attribute in extrematime_from_extrema[each_probe][dt].keys():
-                                extrematime_from_extrema[each_probe][dt][extrematime_attribute]={extrematime_from_mean[each_probe][dt][matching_attribute] if extrematime_from_extrema[each_probe][dt][extrematime_attribute] == None}
-                elif xt == []:
-                    pass
+        new_extrema_data={each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_data_from_mean[each_probe][dt][matching_attribute[i]] in extrema_data_from_mean[each_probe][dt].items()} for dt, extrema_data_from_mean[each_probe][dt] in extrema_data_from_mean[each_probe].items()} for each_probe, extrema_data_from_mean[each_probe] in extrema_data_from_mean.items()}
 
-    return extrema_data_from_extrema, extrema_time_from_extrema
+        extrema_data_from_extrema.update({each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_from_mean[each_probe][dt][matching_attribute[i]] in extrema_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, extrema_from_mean[each_probe][dt] in extrema_from_mean[each_probe].items()} for each_probe, extrema_from_mean[each_probe] in extrema_from_mean.items()})
+
+    return extrema_data_from_extrema, extrematime_from_extrema
 
 def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     """ Aggregates the raw data based on column names.
@@ -691,13 +685,20 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     for each_column in is_tot:
         valid_columns.remove(each_column)
 
+    # Here the re-aggregation begins -->
+    # if the mean isn't empty, mean from mean - will still show all the decimals
+    if valid_columns != []:
+        mean_data_from_mean, _ = daily_functions(raw_data, valid_columns, mean_if_none, xt)
+
+        temporary_smash = mean_data_from_mean
+
     # if max isn't empty, compute max and possibly max time
     if is_max != []:
         max_data_from_mean, maxtime_from_mean = daily_functions(raw_data, valid_columns, max_if_none, xt)
         max_data_from_max, maxtime_from_max = daily_functions(raw_data, is_max, max_if_none, xt)
 
-        # use the extrema function to replace the maxes with the means when they are none
-        max_data_from_max, maxtime_from_max = matching_max_or_max(max_data_from_max, max_data_from_mean, maxtime_from_max, maxtime_from_mean, xt, extrema_key="_MAX")
+        # use the extrema function to replace the maxes from the max with the maxes from the means when there are none. Be smart about replacing the time.
+        max_data_from_max, maxtime_from_max = matching_min_or_max(max_data_from_max, max_data_from_mean, maxtime_from_max, maxtime_from_mean, xt, is_max, valid_columns, extrema_key="_MAX")
 
     # if min isn't empty, compute min and possibly min time
     if is_min != []:
@@ -706,19 +707,12 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
         min_data_from_min, mintime_from_min = daily_functions(raw_data, is_min, min_if_none, xt)
 
         # use the extrema function to replace the min with means when they are none
-        min_data_from_min, mintime_from_min = matching_min_or_max(min_data_from_min, min_data_from_mean, mintime_from_min, mintime_from_mean, xt, extrema_key="_MIN")
-
-    # if the mean isn't empty, mean from mean - will still show all the decimals
-    if valid_columns != []:
-        mean_data_from_mean, _ = daily_functions(raw_data, valid_columns, mean_if_none, xt)
+        min_data_from_min, mintime_from_min = matching_min_or_max(min_data_from_min, min_data_from_mean, mintime_from_min, mintime_from_mean, xt, is_min, valid_columns, extrema_key="_MIN")
 
     import pdb; pdb.set_trace()
-    data_sums = {each_probe:{dt:sum_if_none(raw_data[each_probe][dt][y]) for each_probe in raw_data.keys() for dt in raw_data[each_probe].keys() for y in is_tot}}
-
-
-    pass
-
-def wind_pro(raw_data, column_names):
+    # if wind pro isn't empty, compute wind stuff
+    if is_windpro != []:
+        wind_std = daily_functions(raw_data, is_windpro, wind_std_if_none, xt)
     pass
 
 def wind_snc(raw_data, column_names):
