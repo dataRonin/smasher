@@ -4,6 +4,7 @@ import datetime
 from collections import defaultdict
 import math
 import itertools
+from form_connection import form_connection
 
 
 def isfloat(string):
@@ -12,18 +13,6 @@ def isfloat(string):
         return float(string)
     except Exception:
         return None
-
-def form_connection():
-    """ Connects to the SQL server database - Warning: currently hardcoded """
-
-    server = "sheldon.forestry.oregonstate.edu:1433"
-    user = 'petersonf'
-    password = 'D0ntd1sATLGA!!'
-    conn = pymssql.connect(server, user, password)
-    cur = conn.cursor()
-
-    return conn, cur
-
 
 def get_unique_tables_and_columns(cur):
     """ Gets the tables and columns from the information schema of LTERLogger_pro. Returns a dictionary.
@@ -287,7 +276,6 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
     sql = "select " + column_names_joined + " from lterlogger_pro.dbo." + dbcode + hr_entity + " where " + is_the_date + " > \'" + sd + "\' and " + is_the_date + " <= \'" + ed + "\' order by " + is_probe + ", " + is_the_date + " asc"
 
     cur.execute(sql)
-
 
     # output of the daily data for each probe will go here:
     raw_data = {}
@@ -717,7 +705,6 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
                 else:
                     pass
 
-
     # if max isn't empty, compute max and possibly max time
     if is_max != []:
         max_data_from_mean, maxtime_from_mean = daily_functions(raw_data, valid_columns, max_if_none, xt)
@@ -778,7 +765,7 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     pass
 
     if is_tot != []:
-        tot = daily_functions(raw_data, is_tot, tot_if_none, xt)
+        tot = daily_functions(raw_data, is_tot, sum_if_none, xt)
 
     return smashed_data
 
@@ -825,7 +812,7 @@ def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_dat
     is_method = [x for x in daily_columns if 'METHOD' in x][0]
 
     for each_probe in raw_data.keys():
-        for dt in raw_data[each_probe].keys():
+        for dt in smashed_data[each_probe].keys():
             smashed_data[each_probe][dt].update({'DBCODE': dbcode})
             smashed_data[each_probe][dt].update({is_probe: each_probe})
             smashed_data[each_probe][dt].update({'ENTITY': daily_entity})
@@ -921,7 +908,7 @@ def get_methods_for_all_probes(cur, *sd):
 
     return hr_methods, daily_methods
 
-def create_insertion_statements(smashed_data, daily_index):
+def insert_data(cur, smashed_data, daily_index):
     """ Create a SQL statement for inserting your data back into the database.
 
     The `var_types` variable uses the meta-information about the variable to figure out what type to assign it in the database.
@@ -938,24 +925,50 @@ def create_insertion_statements(smashed_data, daily_index):
             converter = lambda x: '%s' if x =='str' else '%d'
             var_types = [converter(x.__class__.__name__) for x in tuple_data]
 
+            import pdb; pdb.set_trace()
+
+            print("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
             # The following SQL is constructed (raw) like this, FYI
             #cursor.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (%s, %d, %s, %d, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s)", tuple(tuple_data))
 
             cur.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple(tuple_data))
 
 
-    pass
+            print("check the sql!")
+
+            #conn.commit()
+
+def detect_recent_data(cur, smashed_data, each_probe, dt):
+    """ Detect the most recent dt in the daily data before updating. Does not return a start date if there's not one in there.
+    """
+
+    try:
+        sql= "select top 1 date from lterlogger_pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " order by date desc"
+        cur.execute(sql)
+        last_date = cur.fetchone()
+        desired_start_date = last_date[0] + datetime.timedelta(days=1)
+        return desired_start_date
+    except Exception:
+        print("no data found, beginning with water year")
+        return ""
+
+
 
 if __name__ == "__main__":
 
-    conn, cur = form_connection()
+
+    try:
+        # now this is imported from `form_connection.py`
+        conn, cur = form_connection()
+    except Exception:
+        print(" Please create the form_connection script following instructions by Fox ")
     database_map = get_unique_tables_and_columns(cur)
     daily_index = is_daily(database_map)
     hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
     ## this simulates some possible inputs we might see
-    desired_database = 'MS005'
-    desired_daily_entity = '01'
+    desired_database = 'MS043'
+    desired_daily_entity = '03'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
@@ -971,11 +984,12 @@ if __name__ == "__main__":
 
     smashed_data_out = calculate_daily_flags(raw_data, column_names, smashed_data_out)
 
+    # fixes min/max flags associated with a min/max flag that is 'missing'
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MAX")
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MIN")
 
-    create_insertion_statements(smashed_data_out, daily_index)
-    #process_data(cur, desired_database, hr_entity, initial_column_names, hr_methods, daily_methods, sd, ed, xt)
+    insert_data(cur, smashed_data_out, daily_index)
+
     import pdb; pdb.set_trace()
 
-    print("hi")
+    print("the end")
