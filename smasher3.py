@@ -106,11 +106,16 @@ def flag_count(flag_list):
 def daily_flag(flag_counter, critical_value, critical_flag):
     """ Figure out what the daily flag is based on the outputs of the flag counter.
     """
-    if flag_counter['M']/critical_value > 0.2:
-        return 'M'
+    if flag_counter[critical_flag] >= critical_value:
+        return critical_flag
+
     elif flag_counter['E']/critical_value > 0.05:
         return 'E'
-    elif flag_counter['Q'] + flag_counter['E'] + flag_counter['M'] > 0.05:
+    elif flag_counter['Q']/critical_value > 0.05:
+        return 'Q'
+    elif flag_counter['M']/critical_value > 0.2:
+        return 'M'
+    elif (flag_counter['E'] + flag_counter['Q'] + flag_counter['M'])/critical_value > 0.05:
         return 'Q'
     else:
         return critical_flag
@@ -164,7 +169,8 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
     daily_columns = database_map[dbcode][daily_entity]
 
     # empty dictionary for storing daily outputs - this can fit into the smashed data
-    smashed_template = {k:None for k in daily_columns if 'DB_TABLE' not in k}
+    # smashed_template = {k: None for k in daily_columns if 'DB_TABLE' not in k}
+    smashed_template = {k: None for k in daily_columns}
 
     # check for max columns (not including flag) in the daily columns
     xval = [x for x in daily_columns if 'MAX' in x and 'FLAG' not in x]
@@ -382,8 +388,10 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
 def sum_if_none(data_list):
     """ Computes a sum from a list of data even if there are None values.
     """
+
+    rounder = lambda x: round(x,2)
     try:
-        return sum([x for x in data_list if x != None])
+        return rounder(sum([float(x) for x in data_list if x != None and x !='None']))
     except Exception:
         return 0
 
@@ -450,7 +458,7 @@ def vap_if_none(airtemp_list, relhum_list):
 
         vap = lambda x,y: 6.1094*math.exp((17.625*dewpoint(x,y))/(243.04+dewpoint(x,y))) if x != None and y!= None else None
 
-        return mean_if_none([vap(x,y) for x,y in itertools.izip(airtemp_list, relhum_list)])
+        return mean_if_none([vap(x,y) for x,y in zip(airtemp_list, relhum_list)])
 
     except Exception:
         return None
@@ -476,21 +484,27 @@ def wind_mag_if_none(speed_list, dir_list):
     """ Computes the wind magnitude, and needs both the windspeed and the wind direction.
     """
 
-    num_valid = len([x for x in itertools.izip(speed_list,dir_list) if x[0] != None and x[1] != None])
+    rounder = lambda x: round(x,3)
 
-    daily_mag_x_part = (sum([speed * math.cos(math.radians(direction)) for (speed, direction) in itertools.izip(speed_list,dir_list) if speed != None and direction != None])/num_valid)**2
-    daily_mag_y_part = (sum([speed * math.sin(math.radians(direction)) for (speed, direction) in itertools.izip(speed_list,dir_list) if speed != None and direction != None])/num_valid)**2
+    num_valid = len([x for x in zip(speed_list,dir_list) if x[0] != None and x[0] != 'None' and x[1]!= 'None' and x[1] != None])
 
-    return math.sqrt(daily_mag_y_part + daily_mag_x_part)
+    if num_valid == 0:
+        return None
+
+    daily_mag_x_part = (sum([float(speed) * math.cos(math.radians(float(direction))) for (speed, direction) in zip(speed_list,dir_list) if speed != 'None' and speed != None and direction != 'None' and direction != None])/num_valid)**2
+
+    daily_mag_y_part = (sum([float(speed) * math.sin(math.radians(float(direction))) for (speed, direction) in zip(speed_list,dir_list) if speed !='None' and speed != None and direction != 'None' and direction != None])/num_valid)**2
+
+    return rounder(math.sqrt(daily_mag_y_part + daily_mag_x_part))
 
 
 def wind_dir_if_none(speed_list, dir_list):
     """ Computes the weighted wind speed, and needs both speed and direction.
     """
 
-    num_valid = len([x for x in itertools.izip(speed_list,dir_list) if x[0] != None and x[1] != None])
+    num_valid = len([x for x in zip(speed_list,dir_list) if x[0] != None and x[1] != None])
 
-    theta_u = math.atan2(sum([speed * math.sin(math.radians(direction)) for (speed, direction) in itertools.izip(speed_list, dir_list) if speed != None and direction != None])/num_valid, sum([speed * math.cos(math.radians(direction)) for (speed, direction) in itertools.izip(speed_list,dir_list) if speed != None and direction != None])/num_valid)
+    theta_u = math.atan2(sum([float(speed) * math.sin(math.radians(float(direction))) for (speed, direction) in zip(speed_list, dir_list) if speed != 'None' and speed != None and direction != 'None' and direction != None])/num_valid, sum_if_none([float(speed) * math.cos(math.radians(float(direction))) for (speed, direction) in zip(speed_list,dir_list) if speed != 'None' and speed != None and direction != 'None' and direction !=None])/num_valid)
 
     daily_dir = round(math.degrees(theta_u),3)
 
@@ -508,7 +522,7 @@ def wind_std_if_none(dir_list):
 
     num_valid = len_if_none(dir_list)
 
-    daily_epsilon = math.sqrt(1-((sum([math.sin(math.radians(direction)) for direction in dir_list if direction != None])/num_valid)**2 + (sum([math.cos(math.radians(direction)) for direction in dir_list if direction != None])/num_valid)**2))
+    daily_epsilon = math.sqrt(1-((sum([math.sin(math.radians(float(direction))) for direction in dir_list if direction != 'None' and direction != None])/num_valid)**2 + (sum([math.cos(math.radians(float(direction))) for direction in dir_list if direction != 'None' and direction != None])/num_valid)**2))
 
     daily_sigma_theta = math.degrees(math.asin(daily_epsilon)*(1+(2./math.sqrt(3))-1)*daily_epsilon)
 
@@ -542,8 +556,9 @@ def calculate_daily_flags(raw_data, column_names, smashed_data):
 
     for each_probe in smashed_data.keys():
         for dt in smashed_data[each_probe].keys():
-
-            smashed_data[each_probe][dt].update({column_name: daily_flag(data_flags[each_probe][dt][column_name], raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for column_name, data_flags[each_probe][dt][column_name] in data_flags[each_probe][dt].items()})
+            for each_column in data_flags[each_probe][dt].keys():
+                smashed_data[each_probe][dt][each_column] = daily_flag(data_flags[each_probe][dt][each_column], raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag'])
+            #smashed_data[each_probe][dt].update({column_name: daily_flag(data_flags[each_probe][dt][column_name], raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for column_name, data_flags[each_probe][dt][column_name] in data_flags[each_probe][dt].items()})
 
     return smashed_data
 
@@ -554,7 +569,6 @@ def daily_functions(raw_data, column_list, function_choice, xt):
 
     function_choice is either min_if_none, max_if_none, sum_if_none
     """
-
     # data is in the columns following the datetime
     data_columns = [x for x in column_list if 'TIME' not in x]
 
@@ -603,6 +617,24 @@ def daily_functions(raw_data, column_list, function_choice, xt):
 
         return data, data2
 
+def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choice, output_name="DIR"):
+    """ For functions like wind that need both a speed and a direction
+    """
+    dir_cols = [x for x in is_windpro if 'DIR' in x and 'STDDEV' not in x][0]
+    mag_cols = [x for x in is_windpro if 'MAG' in x][0]
+    speed_cols = [x for x in valid_columns if 'SPD' in x][0]
+
+    rounder = lambda x: round(x,3) if x != 'None' and x != None else None
+
+    if 'DIR' in output_name:
+        this_attribute = str(dir_cols)
+    elif 'MAG' in output_name:
+        this_attribute = str(mag_cols)
+
+
+    data = {each_probe:{dt:{each_attribute: rounder(function_choice(raw_data[each_probe][dt][speed_cols], raw_data[each_probe][dt][dir_cols])) for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute == this_attribute} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
+
+    return data
 
 def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, column_names, valid_columns, extrema_key="_MIN"):
     """ Performs the min or max iteration over the min/max data and possibly also the time, replacing None with mean when possible.
@@ -677,6 +709,7 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     for each_column in is_windpro:
         valid_columns.remove(each_column)
 
+
     # if it contains sonic, it should say 'SNC' -- but spd is just a mean
     is_windsnc = [x for x in data_columns if 'SNC' in x and 'SPD' not in x]
 
@@ -689,9 +722,16 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     for each_column in is_tot:
         valid_columns.remove(each_column)
 
+    # if it says "INST" its instantaneous
+    is_inst = [x for x in data_columns if 'INST' in x]
+
+    for each_column in is_inst:
+        valid_columns.remove(each_column)
+
     # Here the re-aggregation begins -->
     # if the mean isn't empty, mean from mean - will still show all the decimals
     if valid_columns != []:
+
         mean_data_from_mean, _ = daily_functions(raw_data, valid_columns, mean_if_none, xt)
 
         # append the new data to the smashed output
@@ -710,6 +750,7 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
         max_data_from_mean, maxtime_from_mean = daily_functions(raw_data, valid_columns, max_if_none, xt)
         max_data_from_max, maxtime_from_max = daily_functions(raw_data, is_max, max_if_none, xt)
 
+        import pdb; pdb.set_trace()
         # use the extrema function to replace the maxes from the max with the maxes from the means when there are none. Be smart about replacing the time.
         max_data_from_max, maxtime_from_max = matching_min_or_max(max_data_from_max, max_data_from_mean, maxtime_from_max, maxtime_from_mean, xt, is_max, valid_columns, extrema_key="_MAX")
 
@@ -761,11 +802,53 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
 
     # if wind pro isn't empty, compute wind stuff
     if is_windpro != []:
-        wind_std = daily_functions(raw_data, is_windpro, wind_std_if_none, xt)
-    pass
 
+        std_cols = [x for x in is_windpro if 'STDDEV' in x]
+        wind_std, _ = daily_functions(raw_data, std_cols, wind_std_if_none, xt)
+
+        # we will only have one speed and direction from the props, so we can know this will always have a length of 1 and the value is in index 0.
+        mean_dir = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_dir_if_none, output_name="DIR")
+        mean_mag = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_mag_if_none, output_name="MAG")
+
+        # append the new data to the smashed output, if there is time, append it...
+        for each_probe in smashed_data.keys():
+            for dt in smashed_data[each_probe].keys():
+
+                # wind direction std
+                if wind_std != {}:
+                    for each_attribute in wind_std[each_probe][dt].keys():
+
+                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = wind_std[each_probe][dt][each_attribute]
+                else:
+                    pass
+
+                # wind direction
+                if mean_dir !={}:
+                    for each_attribute in mean_dir[each_probe][dt].keys():
+
+                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = mean_dir[each_probe][dt][each_attribute]
+                else:
+                    pass
+
+                # wind magnitude
+                if mean_mag !={}:
+                    for each_attribute in mean_mag[each_probe][dt].keys():
+
+                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = mean_mag[each_probe][dt][each_attribute]
+                else:
+                    pass
+
+
+    # totals
     if is_tot != []:
-        tot = daily_functions(raw_data, is_tot, sum_if_none, xt)
+        tot, _ = daily_functions(raw_data, is_tot, sum_if_none, xt)
+        for each_probe in smashed_data.keys():
+            for dt in smashed_data[each_probe].keys():
+
+                if tot != {}:
+                    for each_attribute in tot[each_probe][dt].keys():
+                        smashed_data[each_probe][dt][each_attribute] = tot[each_probe][dt][each_attribute]
+
 
     return smashed_data
 
@@ -803,6 +886,55 @@ def fix_max_min(smashed_data, prefix="MAX"):
 
     return smashed_data
 
+def set_missing_to_none(smashed_data):
+    """ If the data is `present` because it has been calculated but in fact it should be none because it is missing, set that data to None"""
+
+
+    for each_probe in smashed_data.keys():
+        for dt in smashed_data[each_probe].keys():
+
+            flag_columns = [x for x in smashed_data[each_probe][dt].keys() if "_FLAG" in x]
+            data_columns = [x.rstrip("_FLAG") for x in flag_columns]
+
+            set_to_none = {x+"_DAY": None for x in data_columns if smashed_data[each_probe][dt][x+"_FLAG"]=="M" and x+"_DAY" in smashed_data[each_probe][dt].keys()}
+
+            # if there are values to update, update them
+            if set_to_none != {}:
+                for each_update in set_to_none.keys():
+                    smashed_data[each_probe][dt][each_update] = set_to_none[each_update]
+
+            else:
+                pass
+
+    return smashed_data
+
+def windrose_fix(smashed_data):
+    """ If there are windrose flags in the data, set them to 'M' """
+
+    for each_probe in smashed_data.keys():
+        for dt in smashed_data[each_probe].keys():
+
+            # check for wind rose columns and return if there aren't any
+            rose_flag_columns = [x for x in smashed_data[each_probe][dt].keys() if "_FLAG" in x and "ROSE" in x]
+
+            if rose_flag_columns == []:
+                return smashed_data
+            else:
+                data_columns = [x.rstrip("_FLAG")+"_DAY" for x in rose_flag_columns]
+
+                # set wind rose flags to M if wind rose is missing
+                set_to_m = {x: "M" for x in rose_flag_columns if smashed_data[each_probe][dt][x.rstrip("_FLAG") + "_DAY"]== None or smashed_data[each_probe][dt][x.rstrip("_FLAG") + "_DAY"] =='None'}
+
+                # if there are values to update, update them
+                if set_to_m != {}:
+                    for each_update in set_to_m.keys():
+                        smashed_data[each_probe][dt][each_update] = set_to_m[each_update]
+
+                else:
+                    pass
+
+    return smashed_data
+
 
 def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_data):
     """ Gets the daily information about the smashed_data from the condensed flags and updates it.
@@ -811,22 +943,24 @@ def daily_information(smashed_data, dbcode, daily_entity, daily_columns, raw_dat
     is_probe = [x for x in daily_columns if 'PROBE' in x][0]
     is_method = [x for x in daily_columns if 'METHOD' in x][0]
 
-    for each_probe in raw_data.keys():
+    for each_probe in smashed_data.keys():
+
         for dt in smashed_data[each_probe].keys():
-            smashed_data[each_probe][dt].update({'DBCODE': dbcode})
-            smashed_data[each_probe][dt].update({is_probe: each_probe})
-            smashed_data[each_probe][dt].update({'ENTITY': daily_entity})
-            smashed_data[each_probe][dt].update({'SITECODE': raw_data[each_probe][dt]['sitecode']})
-            smashed_data[each_probe][dt].update({'DATE': datetime.datetime.strftime(dt, '%Y-%m-%d %H:%M:%S')})
-            smashed_data[each_probe][dt].update({'EVENT_CODE': 'NA'})
-            smashed_data[each_probe][dt].update({'DB_TABLE': raw_data[each_probe][dt]['db_table']})
-            smashed_data[each_probe][dt].update({'QC_LEVEL': '1P'})
-            smashed_data[each_probe][dt].update({is_method: raw_data[each_probe][dt][is_method]})
+
+            smashed_data[each_probe][dt]['DBCODE'] = dbcode
+            smashed_data[each_probe][dt][is_probe] = each_probe
+            smashed_data[each_probe][dt]['ENTITY'] = daily_entity
+            smashed_data[each_probe][dt]['SITECODE'] = raw_data[each_probe][dt]['sitecode']
+            smashed_data[each_probe][dt]['DATE'] = datetime.datetime.strftime(dt, '%Y-%m-%d %H:%M:%S')
+            smashed_data[each_probe][dt]['EVENT_CODE'] ='NA'
+            smashed_data[each_probe][dt]['DB_TABLE'] = raw_data[each_probe][dt]['db_table']
+            smashed_data[each_probe][dt]['QC_LEVEL'] = '1P'
+            smashed_data[each_probe][dt][is_method] = raw_data[each_probe][dt][is_method]
 
             if 'HEIGHT' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt].update({'HEIGHT': raw_data[each_probe][dt]['height']})
+                smashed_data[each_probe][dt]['HEIGHT'] = raw_data[each_probe][dt]['height']
             elif 'DEPTH' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt].update({'DEPTH': raw_data[each_probe][dt]['depth']})
+                smashed_data[each_probe][dt]['DEPTH'] = raw_data[each_probe][dt]['depth']
             else:
                 pass
 
@@ -962,13 +1096,14 @@ if __name__ == "__main__":
         conn, cur = form_connection()
     except Exception:
         print(" Please create the form_connection script following instructions by Fox ")
+
     database_map = get_unique_tables_and_columns(cur)
     daily_index = is_daily(database_map)
     hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
     ## this simulates some possible inputs we might see
     desired_database = 'MS043'
-    desired_daily_entity = '03'
+    desired_daily_entity = '05'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
@@ -978,18 +1113,25 @@ if __name__ == "__main__":
     # creates a data structure for raw data to be smashed into
     smashed_data_out = generate_smashed_data(smashed_template, raw_data)
 
-    smashed_data_out = daily_information(smashed_data_out, desired_database, desired_daily_entity, daily_columns, raw_data)
-
+    # perform daily calculations
     smashed_data_out = comprehend_daily(smashed_data_out, raw_data, column_names, daily_columns, xt)
 
+    # create the daily flags
     smashed_data_out = calculate_daily_flags(raw_data, column_names, smashed_data_out)
+
+    import pdb; pdb.set_trace()
+    # fixes the windrose if needed
+    smashed_data_out = windrose_fix(smashed_data_out)
 
     # fixes min/max flags associated with a min/max flag that is 'missing'
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MAX")
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MIN")
 
-    insert_data(cur, smashed_data_out, daily_index)
 
-    import pdb; pdb.set_trace()
+    # at the very end, add the fluff
+    smashed_data_out = daily_information(smashed_data_out, desired_database, desired_daily_entity, daily_columns, raw_data)
+
+
+    insert_data(cur, smashed_data_out, daily_index)
 
     print("the end")
