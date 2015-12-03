@@ -53,8 +53,12 @@ def is_daily(database_map):
 
     for each_dbcode in database_map.keys():
 
+
         # sort the entities within so that it's faster to find the matches, since they are in similar order.
         for each_entity in sorted(database_map[each_dbcode].keys()):
+
+            if each_entity == '41' or each_entity == '51':
+                continue
 
             # number that we switch to daily
             critical_value = 10
@@ -67,6 +71,8 @@ def is_daily(database_map):
 
                     keywords = [x.rstrip("_DAY") for x in database_map[each_dbcode][each_entity] if "_DAY" in x]
                     hr_test_entity = str(int(each_entity) + 10)
+
+
 
                     for each_keyword in keywords:
 
@@ -105,6 +111,8 @@ def flag_count(flag_list):
 
 def daily_flag(flag_counter, critical_value, critical_flag):
     """ Figure out what the daily flag is based on the outputs of the flag counter.
+
+    If the number of E's is more than 0.05 it's an E, otherwise if the number of Q's is greater than 0.05 it's a Q, otherwise if the number of M is more than 0.2, than the value is 'M', otherwise if E and M and Q sum to more than 0.05, it's Q, and in all other cases it's A.
     """
     if flag_counter[critical_flag] >= critical_value:
         return critical_flag
@@ -120,20 +128,11 @@ def daily_flag(flag_counter, critical_value, critical_flag):
     else:
         return critical_flag
 
-def drange(start, stop, step):
-    """ Generates an iterator over any sort of range, such as dates or decimals.
-
-    Useful for making a filled `map` of dates. You could start at 2012-10-01 and stop at 2013-10-01 with a step of five minutes. All inputs should be of the same type.
-    """
-    r = start
-    while r <= stop:
-        yield r
-        r+=step
-
 def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, dbcode, daily_entity, *args):
     """ Collects the raw data from the database and couples it with information from the method_history and method_history_daily entities in LTERLogger_new.
 
     `args` are the optional arguments for a start-date (`sd`) and end-date (`ed`). If none are given, the selector will run for the previous water year, figuring out when that started based on today. If run for a daily process, these will be supplied as functions of the last known good data in the daily table.
+
     This function will call the process_data function on the SQL server. It will return `raw_data` : a mapping, by day, of all the high resolution data apart from the informational columns such as site code, the `column_names` are the column names, in order, explicitly pulled from the server as rows, daily_columns, xt, smashed_template
     """
 
@@ -175,7 +174,7 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
     # check for max columns (not including flag) in the daily columns
     xval = [x for x in daily_columns if 'MAX' in x and 'FLAG' not in x]
 
-    # check for maxtime; remove it if present
+    # check for maxtime or mintime; remove it from the list of daily columns if present
     if xval != []:
         xtime = [x for x in xval if 'TIME' in x]
         for x in xtime:
@@ -208,7 +207,7 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
 
 
 def generate_smashed_data(smashed_template, raw_data):
-    """ Creates an output structure for `smashed data`
+    """ Creates an output structure for `smashed data` that contains the daily columns with each probe, each day, and the appropriate headers for the output dictionary.
     """
     smashed_data = {each_probe:{dt:smashed_template for dt, raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
 
@@ -226,19 +225,37 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
     # assign `method` to the first column for the SQL query
     is_method = [x for x in initial_column_names if '_METHOD' in x][0]
     column_names.append(is_method)
+
     # delete this column containing `method` from the original list
     initial_column_names.remove(is_method)
 
     # assign `probe` to the second column for the SQL query
     is_probe = [x for x in initial_column_names if 'PROBE' in x][0]
     column_names.append(is_probe)
+
     # delete this column containing `probe` from the original list
     initial_column_names.remove(is_probe)
 
     # assign `db_table` to the third column for the SQL query
     is_db_table =[x for x in initial_column_names if 'DB_TABLE' in x][0]
     column_names.append(is_db_table)
+
+    # delete the column containing `db_table` from the original list
     initial_column_names.remove(is_db_table)
+
+    # if the data is VPD, this is going to be much more difficult. Get the names of the air temperature columns and flags.
+    is_vpd = [x for x in initial_column_names if "VPD" in x]
+
+    if is_vpd != []:
+
+        local_database_map = get_unique_tables_and_columns(cur)
+        airtemp_columns = ["LTERLogger_pro.dbo." + dbcode + "11"+ "." + x for x in local_database_map[dbcode]['11'] if 'AIRTEMP_MEAN' in x]
+        relhum_columns = ["LTERLogger_pro.dbo." + dbcode + "12"+ "." + x for x in local_database_map[dbcode]['12'] if 'RELHUM_MEAN' in x]
+
+        initial_column_names += airtemp_columns
+        initial_column_names += relhum_columns
+
+        # also we need to give the matching probe_code columns
 
     # assign a variable number of flag columns, which need the word 'FLAG' to work, to the SQL query
     contains_flags = [x for x in initial_column_names if 'FLAG' in x]
@@ -251,7 +268,7 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
         except Exception:
             pass
 
-    # remove informational columns from the original list. Note that we hardcoded in these "worthless" columns. If more are needed, append here.
+    # remove informational columns from the original list. Note that we hardcoded in these "worthless" columns. If more are needed, append here. These columns are added into the final output after the method table is linked in so that the height, method, and sitecode are referenced from there.
     columns_worthless = ['DBCODE', 'ENTITY','EVENT_CODE','SITECODE','QC_LEVEL','ID','HEIGHT','DEPTH']
 
     # remove worthless columns from the original list
@@ -267,33 +284,49 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
     # Add all the remaining initial columns to the SQL query, following the date column. These SHOULD all be numerical data.
     date_position = len(column_names)
 
-    # the data index begins one column after the date
+    # the data index begins one column after the date. Anything with that index or higher is numerical value that could be used in a daily computation.
     data_follows = date_position + 1
     column_names.append(is_the_date)
     initial_column_names.remove(is_the_date)
 
-    column_names += initial_column_names
+    if is_vpd == []:
+        # column_names are the numerical columns we'll use to decide which functions to employ in aggregation
+        column_names += initial_column_names
+
+        # join the column names with a comma for the SQL, needs a string without punctuatin
+        column_names_joined = ", ".join(column_names)
+
+        # create and execute the SQL for these columns
+        sql = "select " + column_names_joined + " from lterlogger_pro.dbo." + dbcode + hr_entity + " where " + is_the_date + " > \'" + sd + "\' and " + is_the_date + " <= \'" + ed + "\' order by " + is_probe + ", " + is_the_date + " asc"
+
+    elif is_vpd !=[]:
+
+        prefix_names = ["LTERLogger_pro.dbo." + dbcode + hr_entity + "." + x for x in column_names if "AIRTEMP" not in x and "RELHUM" not in x and "DATE_TIME" not in x] + [x for x in column_names if "AIRTEMP" in x or "RELHUM" in x]
+
+        prefix_names.append("LTERLogger_pro.dbo." + dbcode + hr_entity + ".DATE_TIME")
+
+        prefix_other_names = ["LTERLogger_pro.dbo." + dbcode + hr_entity + "." + x for x in initial_column_names if "AIRTEMP" not in x and "RELHUM" not in x] + [x for x in initial_column_names if "AIRTEMP" in x or "RELHUM" in x]
+
+        united_names = prefix_names + prefix_other_names
 
 
-    # join the column names with a comma for the SQL
-    column_names_joined = ", ".join(column_names)
+        joiner = " from LTERLogger_pro.dbo." + dbcode + hr_entity + " left join LTERLogger_pro.dbo." + dbcode + "11 on LTERLogger_pro.dbo." + dbcode + hr_entity + ".DATE_TIME = LTERLogger_pro.dbo." + dbcode + "11.DATE_TIME AND LTERLogger_pro.dbo." + dbcode + hr_entity + ".SITECODE = LTERLogger_pro.dbo." + dbcode + "11.SITECODE AND LTERLogger_pro.dbo." + dbcode + hr_entity + ".HEIGHT = LTERLogger_pro.dbo." + dbcode + "11.HEIGHT inner join LTERLogger_pro.dbo." + dbcode + "12 on LTERLogger_pro.dbo." + dbcode + "11.DATE_TIME = LTERLogger_pro.dbo." + dbcode + "12.DATE_TIME AND LTERLogger_pro.dbo." + dbcode + "11.SITECODE = LTERLogger_pro.dbo." + dbcode + "12.SITECODE AND LTERLogger_pro.dbo." + dbcode + "11.HEIGHT = LTERLogger_pro.dbo." + dbcode + "12.HEIGHT where LTERLogger_pro.dbo." + dbcode + hr_entity + "." +is_the_date + " > \'" + sd + "\' and LTERLogger_pro.dbo." + dbcode + hr_entity + "." + is_the_date + " <= \'" + ed + "\' order by LTERLogger_pro.dbo." + dbcode + hr_entity + "." +is_probe + ", LTERLogger_pro.dbo." + dbcode + hr_entity + "." + is_the_date + " asc"
 
-    # create and execute the SQL for these columns
-    sql = "select " + column_names_joined + " from lterlogger_pro.dbo." + dbcode + hr_entity + " where " + is_the_date + " > \'" + sd + "\' and " + is_the_date + " <= \'" + ed + "\' order by " + is_probe + ", " + is_the_date + " asc"
+        sql = "select " + ", ".join(united_names) + joiner
 
+    # EXECUTE THE SQL (works for both the VPD and for the regular stuff)
     cur.execute(sql)
 
-    # output of the daily data for each probe will go here:
+    # raw gathered HR data populates raw_data; each probe, date, and attribute has within it a list of the daily values and flags.
     raw_data = {}
 
     for row in cur:
 
         try:
-            # # if the date is 10-01-2014 00:05 to 10-02-2014 00:00:05, then these values will lose five minutes to 10-01-2014 00:00:00 and 10-02-2014 00:00:00 and be mapped to the day 10-01-2014
+            # # if the date is 10-01-2014 00:05 to 10-02-2014 00:00:05, then these values will lose five minutes to 10-01-2014 00:00:00 and 10-02-2014 00:00:00 and be mapped to the day 10-01-2014. Remember this! Because the hourly and 15 minute values will ultimately be part of the "day" rather than the "hour", they will not be affected differently. However, the maxtime and mintime will need to be re-adjusted if calculated.
             adjusted_date_time = datetime.datetime.strptime(str(row[date_position]),'%Y-%m-%d %H:%M:%S') - datetime.timedelta(minutes=5)
 
             adjusted_date = datetime.datetime(adjusted_date_time.year, adjusted_date_time.month, adjusted_date_time.day)
-
         except Exception:
             print("looks like there's no data here")
             continue
@@ -326,7 +359,7 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
             # put the daily method for the method code, but use the high-resolution information for the other data. also, add the db_table
             raw_data[probe_code]={adjusted_date:{is_method: this_daily_method['method_code'], 'critical_flag': this_method['critical_flag'], 'critical_value':this_method['critical_value'],'height': this_method['height'], 'depth': this_method['depth'], 'sitecode': this_method['sitecode'], 'db_table': db_table}}
 
-            # for debugging only
+            # for debugging only - you can delete this without ill effect.
             print("KEYS ADDED SO FAR TO DAILY DATA:")
             print(raw_data.keys())
 
@@ -383,15 +416,19 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
                 else:
                     pass
 
-    return raw_data, column_names
+    if is_vpd != []:
+        vpd_column_names = [x.lstrip('LTERLogger_pro.dbo.MS0431').lstrip('2.').lstrip('8.').lstrip('1.') for x in united_names]
+        return raw_data, vpd_column_names
+    else:
+        return raw_data, column_names
 
 def sum_if_none(data_list):
-    """ Computes a sum from a list of data even if there are None values.
+    """ Computes a sum from a list of data even if there are None values. Rounds it to 2 decimal points. Returns a 0 if there are no values.
     """
 
     rounder = lambda x: round(x,2)
     try:
-        return rounder(sum([float(x) for x in data_list if x != None and x !='None']))
+        return rounder(sum([isfloat(x) for x in data_list if x != None and x !='None']))
     except Exception:
         return 0
 
@@ -399,27 +436,24 @@ def len_if_none(data_list):
     """ Computes the length of a list for values that are not None. Returns a zero if the list has no length.
     """
     try:
-        return len([x for x in data_list if x != None])
+        return len([x for x in data_list if x != None and x != 'None'])
     except Exception:
         return 0
 
-def mean_if_none(data_list, *args):
-    """ Computes the mean for a list, even if there are None values. Uses sum_if_none and len_if_none to assure both numerator and denominator have same values. Returns None if the list cannot be computed.
+def mean_if_none(data_list):
+    """ Computes the mean for a list, even if there are None values.
+
+    Uses `sum_if_none` and `len_if_none` to assure both numerator and denominator have same values. Returns None if the list cannot be computed.
     """
 
     rounder = lambda x: round(x,2)
 
     if all(x is None for x in data_list) != True:
 
-        # if a second arguement is passed, it is the critical value. If there are less numbers in the mean calculation tham 80% of this value, the day is missing, so we should return a None
-        if args and len_if_none(data_list) <= 0.8*args:
+        try:
+            return rounder(sum([isfloat(x) for x in data_list if x != 'None' and x != None])/len([x for x in data_list if x != 'None' and x != None]))
+        except Exception:
             return None
-        else:
-
-            try:
-                return rounder(sum([float(x) for x in data_list if x != 'None' and x != None])/len([x for x in data_list if x != 'None' and x != None]))
-            except Exception:
-                return None
 
     else:
         return None
@@ -428,9 +462,9 @@ def vpd_if_none(airtemp_list, relhum_list):
     """ Compute the vapor pressure defecit from air temperature and relative humidity.
     """
     try:
-        satvp = lambda x: 6.1094*math.exp(17.625*(smasher3.isfloat(x))/(243.04+smasher3.isfloat(x))) if x !=None else None
+        satvp = lambda x: 6.1094*math.exp(17.625*(isfloat(x))/(243.04+isfloat(x))) if x !=None else None
 
-        vpd = mean_if_none([((100-isfloat(y))*0.01)*satvp(x) for x, y in zip(airtemp_list, relhum_list) if x != None and y != None])
+        vpd = mean_if_none([((100-isfloat(y))*0.01)*satvp(x) for x, y in zip(airtemp_list, relhum_list) if x != 'None' and x != None and y != 'None' and y != None])
         return vpd
 
     except Exception:
@@ -444,7 +478,7 @@ def satvp_if_none(data_list):
     """
     try:
         # the days satvp - a function of air temp - and a mean of the day
-        return mean([6.1094*math.exp(17.625*(float(x))/(243.04+float(x))) for x in data_list if x != None])
+        return mean([6.1094*math.exp(17.625*(isfloat(x))/(243.04+isfloat(x))) for x in data_list if x !='None' and x != None])
     except Exception:
         return None
 
@@ -590,19 +624,30 @@ def daily_functions(raw_data, column_list, function_choice, xt):
             data2 = {}
 
             # for each probe, date, and attribute, if that column is not in the column listing, pass over it
-            for each_probe in raw_data.keys():
-                for dt in raw_data[each_probe].keys():
-                    for each_attribute in raw_data[each_probe][dt].keys():
+            for each_probe in list(raw_data.keys()):
+                for dt in list(raw_data[each_probe].keys()):
+                    for each_attribute in list(raw_data[each_probe][dt].keys()):
                         new_attribute_name = each_attribute + "TIME"
+
                         if each_attribute not in data_columns:
                             continue
 
                         try:
+                            # output may be as a string
                             function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(function_choice(raw_data[each_probe][dt][each_attribute])))]
                         except Exception:
-                            function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(function_choice(raw_data[each_probe][dt][each_attribute]))]
+                            try:
+                                # or a number that is a float
+                                function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(function_choice(raw_data[each_probe][dt][each_attribute]))]
+                            except Exception:
+                                try:
+                                    # or like solar, an integer...
+                                    function_time = raw_data[each_probe][dt]['date_time'][raw_data[each_probe][dt][each_attribute].index(str(int(function_choice(raw_data[each_probe][dt][each_attribute]))))]
+                                except Exception:
+                                    import pdb; pdb.set_trace()
 
                         if each_probe not in data2.keys():
+
                             data2[each_probe] = {dt:{new_attribute_name: function_time}}
 
                         elif each_probe in data2.keys():
@@ -615,7 +660,7 @@ def daily_functions(raw_data, column_list, function_choice, xt):
                                     print("error in adding the new data")
                                     import pdb; pdb.set_trace()
 
-        return data, data2
+            return data, data2
 
 def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choice, output_name="DIR"):
     """ For functions like wind that need both a speed and a direction
@@ -709,12 +754,35 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     for each_column in is_windpro:
         valid_columns.remove(each_column)
 
-
-    # if it contains sonic, it should say 'SNC' -- but spd is just a mean
-    is_windsnc = [x for x in data_columns if 'SNC' in x and 'SPD' not in x]
+    # if it contains sonic, it should say 'SNC' -- remove all but max
+    is_windsnc = [x for x in data_columns if 'SNC' in x]
 
     for each_column in is_windsnc:
         valid_columns.remove(each_column)
+
+        # regular mean
+        columns_for_a_regular_mean = [x for x in is_windsnc if 'DIR' not in x and 'STDDEV' not in x and 'MAX' not in x]
+        # mean for all the mean stuff
+        mean_data_from_mean_snc, _ = daily_functions(raw_data, columns_for_a_regular_mean, mean_if_none, xt)
+
+        # max only on speed
+        columns_for_a_max = [x for x in is_windsnc if 'MAX' in x]
+        # max for the mean if we need it
+        max_data_from_max_snc, maxtime_from_max_snc = daily_functions(raw_data, columns_for_a_max, max_if_none, xt)
+
+        # max from mean only on speed
+        columns_for_max_speed_from_mean =[x.rstrip('_MAX') + '_MEAN' for x in columns_for_a_max]
+
+        # max for the mean if we need it
+        max_data_from_mean_snc, maxtime_from_mean_snc = daily_functions(raw_data, columns_for_max_speed_from_mean, max_if_none, xt)
+
+        # fix the max if it's missing to be computed from the mean
+        max_data_from_max_snc, maxtime_from_max_snc = matching_min_or_max(max_data_from_max_snc, max_data_from_mean_snc, maxtime_from_max_snc, maxtime_from_mean_snc, xt, is_max, valid_columns, extrema_key="_MAX")
+
+        columns_for_deviation = [x for x in is_windsnc if 'STDDEV' in x and 'DIR' not in x]
+        columns_for_dir_deviation = [x for x in is_windsnc if 'DIR' in x and 'STDDEV' not in x]
+
+        wind_std_snc, _ = daily_functions(raw_data, columns_for_dir_deviation, wind_std_if_none, xt)
 
     # if it says 'TOT' its a total
     is_tot = [x for x in data_columns if 'TOT' in x]
@@ -731,47 +799,16 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     # Here the re-aggregation begins -->
     # if the mean isn't empty, mean from mean - will still show all the decimals
     if valid_columns != []:
-
         mean_data_from_mean, _ = daily_functions(raw_data, valid_columns, mean_if_none, xt)
 
-        # append the new data to the smashed output
-        for each_probe in smashed_data.keys():
-            for dt in smashed_data[each_probe].keys():
-
-                if mean_data_from_mean != {}:
-                    for each_attribute in mean_data_from_mean[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = mean_data_from_mean[each_probe][dt][each_attribute]
-                else:
-                    pass
 
     # if max isn't empty, compute max and possibly max time
     if is_max != []:
         max_data_from_mean, maxtime_from_mean = daily_functions(raw_data, valid_columns, max_if_none, xt)
         max_data_from_max, maxtime_from_max = daily_functions(raw_data, is_max, max_if_none, xt)
 
-        import pdb; pdb.set_trace()
         # use the extrema function to replace the maxes from the max with the maxes from the means when there are none. Be smart about replacing the time.
         max_data_from_max, maxtime_from_max = matching_min_or_max(max_data_from_max, max_data_from_mean, maxtime_from_max, maxtime_from_mean, xt, is_max, valid_columns, extrema_key="_MAX")
-
-        # append the new data to the smashed output, if there is time, append it...
-        for each_probe in smashed_data.keys():
-            for dt in smashed_data[each_probe].keys():
-                if maxtime_from_max != {}:
-                    for each_attribute in maxtime_from_max[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute]=maxtime_from_max[each_probe][dt][each_attribute]
-
-                else:
-                    pass
-
-                if max_data_from_max != {}:
-                    for each_attribute in max_data_from_max[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = max_data_from_max[each_probe][dt][each_attribute]
-                else:
-                    pass
-
 
     # if min isn't empty, compute min and possibly min time
     if is_min != []:
@@ -781,24 +818,6 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
 
         # use the extrema function to replace the min with means when they are none
         min_data_from_min, mintime_from_min = matching_min_or_max(min_data_from_min, min_data_from_mean, mintime_from_min, mintime_from_mean, xt, is_min, valid_columns, extrema_key="_MIN")
-
-        # append the new data to the smashed output, if there is time, append it...
-        for each_probe in smashed_data.keys():
-            for dt in smashed_data[each_probe].keys():
-                if mintime_from_min != {}:
-                    for each_attribute in mintime_from_min[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute]=mintime_from_min[each_probe][dt][each_attribute]
-
-                else:
-                    pass
-
-                if min_data_from_min != {}:
-                    for each_attribute in min_data_from_min[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = min_data_from_min[each_probe][dt][each_attribute]
-                else:
-                    pass
 
     # if wind pro isn't empty, compute wind stuff
     if is_windpro != []:
@@ -810,46 +829,17 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
         mean_dir = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_dir_if_none, output_name="DIR")
         mean_mag = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_mag_if_none, output_name="MAG")
 
-        # append the new data to the smashed output, if there is time, append it...
-        for each_probe in smashed_data.keys():
-            for dt in smashed_data[each_probe].keys():
-
-                # wind direction std
-                if wind_std != {}:
-                    for each_attribute in wind_std[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = wind_std[each_probe][dt][each_attribute]
-                else:
-                    pass
-
-                # wind direction
-                if mean_dir !={}:
-                    for each_attribute in mean_dir[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = mean_dir[each_probe][dt][each_attribute]
-                else:
-                    pass
-
-                # wind magnitude
-                if mean_mag !={}:
-                    for each_attribute in mean_mag[each_probe][dt].keys():
-
-                        smashed_data[each_probe][dt][each_attribute + "_DAY"] = mean_mag[each_probe][dt][each_attribute]
-                else:
-                    pass
-
-
     # totals
     if is_tot != []:
         tot, _ = daily_functions(raw_data, is_tot, sum_if_none, xt)
-        for each_probe in smashed_data.keys():
-            for dt in smashed_data[each_probe].keys():
 
-                if tot != {}:
-                    for each_attribute in tot[each_probe][dt].keys():
-                        smashed_data[each_probe][dt][each_attribute] = tot[each_probe][dt][each_attribute]
+        for each_probe_t in list(tot.keys()):
+            for dt_t in list(tot[each_probe_t].keys()):
+                for each_attribute_t in tot[each_probe_t][dt_t].keys():
+                    smashed_data[each_probe_t][dt_t][each_attribute_t + "_DAY"] = tot[each_probe_t][dt_t][each_attribute_t]
 
 
+    import pdb; pdb.set_trace()
     return smashed_data
 
 def wind_snc(raw_data, column_names):
@@ -872,7 +862,6 @@ def fix_max_min(smashed_data, prefix="MAX"):
 
                     # if the day is not None but the data indicates an 'M'
                     if smashed_data[each_probe][dt][mx] != None and smashed_data[each_probe][dt][mx.rstrip(prefix + "_DAY") + "_" + prefix + "_FLAG"] == 'M':
-
 
                         try:
                             smashed_data[each_probe][dt][mx.rstrip("DAY") + "FLAG"] = smashed_data[each_probe][dt][mx.rstrip("_" + prefix + "_DAY") + "_MEAN_FLAG"]
@@ -1103,7 +1092,7 @@ if __name__ == "__main__":
 
     ## this simulates some possible inputs we might see
     desired_database = 'MS043'
-    desired_daily_entity = '05'
+    desired_daily_entity = '08'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
@@ -1113,13 +1102,15 @@ if __name__ == "__main__":
     # creates a data structure for raw data to be smashed into
     smashed_data_out = generate_smashed_data(smashed_template, raw_data)
 
+    import pdb; pdb.set_trace()
+
     # perform daily calculations
     smashed_data_out = comprehend_daily(smashed_data_out, raw_data, column_names, daily_columns, xt)
+
 
     # create the daily flags
     smashed_data_out = calculate_daily_flags(raw_data, column_names, smashed_data_out)
 
-    import pdb; pdb.set_trace()
     # fixes the windrose if needed
     smashed_data_out = windrose_fix(smashed_data_out)
 
@@ -1127,7 +1118,8 @@ if __name__ == "__main__":
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MAX")
     smashed_data_out = fix_max_min(smashed_data_out, prefix="MIN")
 
-
+    # any values which are missing but not none should be none
+    #smashed_data_out = set_missing_to_none(smashed_data_out)
     # at the very end, add the fluff
     smashed_data_out = daily_information(smashed_data_out, desired_database, desired_daily_entity, daily_columns, raw_data)
 
