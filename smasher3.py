@@ -602,73 +602,26 @@ def daily_functions_vpd(raw_data, vpd_list, valid_columns, function_choice, xt):
 
     elif 'max' in function_choice.__name__ or 'min' in function_choice.__name__:
 
-        import pdb; pdb.set_trace()
+
         # if you want the max, but no time
         if xt != True:
-            data = {each_probe:{dt: rounder(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]), ind=False) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+            data = {each_probe:{dt: rounder(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=False)) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+
             data_2 = {}
             return data, data2
 
         elif xt == True:
-            data = {each_probe:{dt: rounder(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]), ind=True) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
-            data2 = {}
 
-            # daily time columns?
-            time_attribute = lambda function_choice: function_choice.__name__.split('_')[1].upper() +"_"+ function_choice.__name__.split('_')[0].upper() + "TIME"
+            # get the data outside of the tuple, so you don't need to index later
+            data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=False) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
-            import pdb; pdb.set_trace()
-
-            #raw_data[each_probe][dt]['date_time'][]
-
-            # for each probe, date, and attribute, if that column is not in the column listing, pass over it
-            for each_probe in list(raw_data.keys()):
-                for dt in list(raw_data[each_probe].keys()):
-
-                    try:
-
-                        # output may be as a string
-                        function_time = raw_data[each_probe][dt]['date_time'][data[each_probe][dt][this_attribute].index(rounder(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data])))]
-
-                    except Exception:
-                        try:
-                            # or a number that is a float
-                            function_time = raw_data[each_probe][dt]['date_time'][data[each_probe][dt][this_attribute].index(str(rounder(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]))))]
-                        except Exception:
-                            try:
-                                # less precision
-                                function_time = raw_data[each_probe][dt]['date_time'][data[each_probe][dt][this_attribute].index(str(rounder2(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]))))]
-                            except Exception:
-                                try:
-                                    # even less precision
-                                    function_time = raw_data[each_probe][dt]['date_time'][data[each_probe][dt][this_attribute].index(str(rounder1(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]))))]
-                                except Exception:
-
-                                    try:
-                                        # or like solar, an integer...
-                                        function_time = raw_data[each_probe][dt]['date_time'][data[each_probe][dt][each_attribute].index(str(int(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data]))))]
-                                    except Exception:
-                                        import pdb; pdb.set_trace()
-
-
-                    if each_probe not in data2.keys():
-
-                        data2[each_probe] = {dt:{time_attribute(function_choice): function_time}}
-
-                    elif each_probe in data2.keys():
-                        if dt not in data2[each_probe].keys():
-                            data2[each_probe][dt] = {time_attribute(function_choice): function_time}
-                        elif dt in data2[each_probe].keys():
-                            if new_attribute_name not in data2[each_probe][dt].keys():
-                                data2[each_probe][dt][time_attribute(function_choice)] = function_time
-                            elif time_attribute(function_choice) in data2[each_probe][dt][time_attribute(function_choice)].keys():
-                                print("error in adding the new data")
-                                import pdb; pdb.set_trace()
-
+            # get the time stamps in the tuple
+            data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=True) != None} for each_probe in raw_data.keys()}
             return data, data2
-    else:
-        data2 = {}
 
-    return data, data2
+        else:
+
+            print("error in function for computing vpd means/max/mins")
 
 def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, column_names, valid_columns, extrema_key="_MIN"):
     """ Performs the min or max iteration over the min/max data and possibly also the time, replacing None with mean when possible.
@@ -716,6 +669,9 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
     """ Aggregates the raw data based on column names.
 
     """
+
+    # this is how to turn a min/max into mintime or maxtime based on the function that gets called from the is_none file.
+    time_attribute = lambda func: func.__name__.split('_')[1].upper() +"_"+ func.__name__.split('_')[0].upper() + "TIME"
 
     temporary_smash = {}
 
@@ -794,7 +750,13 @@ def comprehend_daily(smashed_data, raw_data, column_names, daily_columns, xt):
 
         mean_vap_data_from_mean, _ = daily_functions_vpd(raw_data, do_vap, valid_columns, vap_if_none, xt)
         temporary_smash.update({'VAP_MEAN_DAY':mean_vap_data_from_mean})
+
         max_vap_data_from_mean, maxtime_vap_from_mean = daily_functions_vpd(raw_data, do_vap, valid_columns, max_vap_if_none, xt)
+        temporary_smash.update({'VAP_MAX_DAY': max_vap_data_from_mean})
+        time_name = time_attribute(max_vap_if_none)
+        temporary_smash.update({time_name : maxtime_vap_from_mean})
+
+        import pdb; pdb.set_trace()
         min_vap_data_from_mean, mintime_vap_from_mean = daily_functions_vpd(raw_data, do_vap, valid_columns, min_vap_if_none, xt)
 
 

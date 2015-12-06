@@ -86,9 +86,11 @@ def max_vpd_if_none(airtemp_list, relhum_list, ind=False):
         vpd = max_if_none(vpd_1)
 
         if ind != False:
-            max_index = vpd_1.index(max_if_none(vpd_1))
-
-            return vpd, max_index
+            try:
+                max_index = vpd_1.index(max_if_none(vpd_1))
+                return (vpd, max_index)
+            except Exception:
+                return (None, None)
         else:
             return vpd
 
@@ -107,8 +109,11 @@ def min_vpd_if_none(airtemp_list, relhum_list, ind=False):
         vpd = min_if_none(vpd1)
 
         if ind != False:
-            min_index = vpd_1.index(min_if_none(vpd_1))
-            return vpd, min_index
+            try:
+                min_index = vpd_1.index(min_if_none(vpd_1))
+                return (vpd, min_index)
+            except Exception:
+                return (None, None)
         else:
             return vpd
 
@@ -183,8 +188,11 @@ def max_vap_if_none(airtemp_list, relhum_list, ind=False):
         max_vap = max_if_none(vap_1)
 
         if ind != False:
-            max_index = vap_1.index(max_if_none(vap_1))
-            return (max_vap, max_index)
+            try:
+                max_index = vap_1.index(max_if_none(vap_1))
+                return (max_vap, max_index)
+            except Exception:
+                return (None, None)
         else:
             return max_vap
 
@@ -207,8 +215,11 @@ def min_vap_if_none(airtemp_list, relhum_list, ind=False):
         vap_1 = [vap(x,y) for x,y in zip(airtemp_list, relhum_list)]
 
         if ind != False:
-            min_index = vap_1.index(min_if_none(vap_1))
-            return min_vap, min_index
+            try:
+                min_index = vap_1.index(min_if_none(vap_1))
+                return min_vap, min_index
+            except Exception:
+                return (None, None)
         else:
             return min_vap
 
