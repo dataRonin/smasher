@@ -123,9 +123,13 @@ def daily_flag(flag_counter, critical_value, critical_flag):
 
     If the number of E's is more than 0.05 it's an E, otherwise if the number of Q's is greater than 0.05 it's a Q, otherwise if the number of M is more than 0.2, than the value is 'M', otherwise if E and M and Q sum to more than 0.05, it's Q, and in all other cases it's A.
     """
+
     if flag_counter[critical_flag] >= critical_value:
         return critical_flag
 
+    # here's the case where there are too many values, when the 15 and 5 minute datas are merged...
+    elif sum(flag_counter[x] for x in flag_counter.keys()) >= critical_value + 3:
+        return critical_flag
     elif flag_counter['E']/critical_value > 0.05:
         return 'E'
     elif flag_counter['Q']/critical_value > 0.05:
@@ -478,8 +482,11 @@ def cleanse(x):
 
 def calculate_daily_flags(raw_data, column_names, temporary_smash):
     """ Daily flags computed with flag_count function.
+
+    `flag_count` function creates a defaultdict. we find the columns in the high-resolution (raw) data that have flags and compute flags for them by counting the number of each unique key during that day.
     """
     temporary_flags ={}
+
     # find the columns that contain flags and remove the FLAG_PRO column
     flag_columns = column_names[3:column_names.index('DATE_TIME')]
 
@@ -492,14 +499,13 @@ def calculate_daily_flags(raw_data, column_names, temporary_smash):
 
     valid_columns = flag_columns[:]
 
-    import pdb; pdb.set_trace()
-
     for each_flag in valid_columns:
+        # note that at this point, the 'min flags' and 'max flags' may appear to be 'missing' even if a value is there.
         data_flags = {each_probe:{dt: daily_flag(flag_count(raw_data[each_probe][dt][each_flag]), raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
         temporary_flags.update({each_flag:data_flags})
-    return temporary_flags
 
+    return temporary_flags
 
 def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choice, output_name="DIR"):
     """ For functions like wind that need both a speed and a direction
@@ -520,42 +526,6 @@ def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choi
 
     return data
 
-
-def matching_min_or_max(extrema_data_from_extrema, extrema_data_from_mean, extrematime_from_extrema, extrematime_from_mean, xt, column_names, valid_columns, extrema_key="_MIN"):
-    """ Performs the min or max iteration over the min/max data and possibly also the time, replacing None with mean when possible.
-    """
-
-    extrema_attribute_keys = [x.rstrip(extrema_key) for x in column_names]
-
-    #airtemp_
-    for keyword in extrema_attribute_keys:
-        #[airtemp_mean]
-        matching_attribute = [x for x in valid_columns if keyword in x]
-
-    if xt == True:
-        extrematime_attribute = [x+"TIME" for x in column_names]
-        matching_time_attribute = [x+"TIME" for x in matching_attribute]
-
-        for i,each_attribute in enumerate(extrematime_attribute):
-
-            # Data from mean-based max/min time to max/min time label
-            new_extrematime_data={each_probe:{dt:{each_attribute: str(extrematime_from_mean[each_probe][dt][matching_time_attribute[i]].hour).zfill(2) + str(extrematime_from_mean[each_probe][dt][matching_time_attribute[i]].minute).zfill(2) for matching_time_attribute[i], extrematime_from_mean[each_probe][dt][matching_time_attribute[i]] in extrematime_from_mean[each_probe][dt].items()} for dt, extrematime_from_mean[each_probe][dt] in extrematime_from_mean[each_probe].items()} for each_probe, extrematime_from_mean[each_probe] in extrematime_from_mean.items()}
-
-            # if the max time or min time is None then replace with the mean
-            extrematime_from_extrema.update({each_probe:{dt:{each_attribute: new_extrematime_data[each_probe][dt][each_attribute] for each_attribute, new_extrematime_data[each_probe][dt][each_attribute] in new_extrematime_data[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, new_extrematime_data[each_probe][dt] in new_extrematime_data[each_probe].items()} for each_probe, new_extrematime_data[each_probe] in new_extrematime_data.items()})
-    else:
-        pass
-
-    for i, each_attribute in enumerate(column_names):
-
-        # Data from mean-based max/min data to max/min data label
-        new_extrema_data={each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_data_from_mean[each_probe][dt][matching_attribute[i]] in extrema_data_from_mean[each_probe][dt].items()} for dt, extrema_data_from_mean[each_probe][dt] in extrema_data_from_mean[each_probe].items()} for each_probe, extrema_data_from_mean[each_probe] in extrema_data_from_mean.items()}
-
-
-        # Replace the data if the max or min data is None
-        extrema_data_from_extrema.update({each_probe:{dt:{each_attribute: extrema_data_from_mean[each_probe][dt][matching_attribute[i]] for matching_attribute[i], extrema_data_from_mean[each_probe][dt][matching_attribute[i]] in extrema_data_from_mean[each_probe][dt].items() if extrema_data_from_extrema[each_probe][dt][column_names[i]] == None} for dt, extrema_data_from_mean[each_probe][dt] in extrema_data_from_mean[each_probe].items()} for each_probe, extrema_data_from_mean[each_probe] in extrema_data_from_mean.items()})
-
-    return extrema_data_from_extrema, extrematime_from_extrema
 
 def comprehend_daily(smashed_template, raw_data, column_names, xt):
     """ Aggregates the raw data based on column names. Performs basic sums, means, etc. by calling functions in the file `if_none.py`
@@ -735,8 +705,7 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
                 #new_column = each_max_column + "DAY_2"
                 #temporary_smash.update({new_column: max_data_from_max})
 
-                my_probes = sorted(list(temporary_smash[new_column].keys()))
-
+                my_probes = sorted(list(max_data_from_max.keys()))
                 for each_probe in my_probes:
                     my_dates = []
                     my_dates = sorted(list(max_data_from_max[each_probe].keys()))
@@ -758,14 +727,14 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
 
                 my_probes = []
                 my_probes = sorted(list(maxtime_from_max.keys()))
-                    for each_probe in my_probes:
-                        my_dates = []:
-                        my_dates = sorted(list(maxtime_from_max[each_probe].keys()))
-                        for each_date in my_dates:
-                            if str(max_data_from_max[each_probe][each_date]) != 'None':
-                                temporary_smash[old_column][each_probe][each_date] = maxtime_from_max[each_probe][each_date]
-                            else:
-                                pass
+                for each_probe in my_probes:
+                    my_dates = []
+                    my_dates = sorted(list(maxtime_from_max[each_probe].keys()))
+                    for each_date in my_dates:
+                        if str(max_data_from_max[each_probe][each_date]) != 'None':
+                            temporary_smash[old_column][each_probe][each_date] = maxtime_from_max[each_probe][each_date]
+                        else:
+                            pass
 
             elif each_max_column not in temporary_smash.keys() and xt == True:
                 temporary_smash.update({each_max_column + "TIME": max_time_from_max})
@@ -786,8 +755,7 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
                 #new_column = each_min_column + "DAY_2"
                 #temporary_smash.update({new_column: min_data_from_min})
 
-                my_probes = sorted(list(temporary_smash[new_column].keys()))
-
+                my_probes = sorted(list(min_data_from_min.keys()))
                 for each_probe in my_probes:
                     my_dates = []
                     my_dates = sorted(list(min_data_from_min[each_probe].keys()))
@@ -809,14 +777,14 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
 
                 my_probes = []
                 my_probes = sorted(list(mintime_from_min.keys()))
-                    for each_probe in my_probes:
-                        my_dates = []:
-                        my_dates = sorted(list(mintime_from_min[each_probe].keys()))
-                        for each_date in my_dates:
-                            if str(min_data_from_min[each_probe][each_date]) != 'None':
-                                temporary_smash[old_column][each_probe][each_date] = mintime_from_min[each_probe][each_date]
-                            else:
-                                pass
+                for each_probe in my_probes:
+                    my_dates = []
+                    my_dates = sorted(list(mintime_from_min[each_probe].keys()))
+                    for each_date in my_dates:
+                        if str(min_data_from_min[each_probe][each_date]) != 'None':
+                            temporary_smash[old_column][each_probe][each_date] = mintime_from_min[each_probe][each_date]
+                        else:
+                            pass
 
             elif each_min_column not in temporary_smash.keys() and xt == True:
                 temporary_smash.update({each_min_column + "TIME": min_time_from_min})
@@ -824,22 +792,6 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
             else:
                 pass
 
-        # for each_min_column in is_min:
-        #     min_data_from_min, mintime_from_min = daily_functions_normal(raw_data, each_min_column, min_if_none, xt)
-
-        # if each_min_column + "_DAY" in temporary_smash.keys():
-        #     new_name = each_min_column + "_DAY_2"
-        #     temporary_smash.update({new_name: min_data_from_min})
-        # elif each_min_column not in temporary_smash.keys():
-        #     temporary_smash.update({each_min_column + "_DAY": min_data_from_min})
-
-        # if each_min_column + "TIME" in temporary_smash.keys():
-        #     new_name = each_min_column + "TIME_2"
-        #     temporary_smash.update({new_name: mintime_from_min})
-        # elif each_min_column not in temporary_smash.keys():
-        #     temporary_smash.update({each_min_column + "TIME":min_time_from_min})
-
-    import pdb; pdb.set_trace()
     # if wind pro isn't empty, compute wind stuff
     if is_windpro != []:
 
@@ -857,67 +809,82 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
 
     return temporary_smash
 
-
-
-def create_outs(raw_data, smashed_template, temporary_smash, temporary_flags):
-    """ Generate appropriate output structures
+def unite_data(temporary_smash, temporary_flags):
     """
-    list_of_probes = sorted(list(raw_data.keys()))
+    Simple : takes temporary smash, updates it with temporary flags, makes an output array
+    """
 
-    for each_probe in list_of_probes:
-        list_of_dates = sorted(list(raw_data[each_probe].keys()))
+    smashed_data = {}
+    smashed_data.update(temporary_smash)
+    smashed_data.update(temporary_flags)
+    return smashed_data
 
-        import pdb; pdb.set_trace()
-
-
-def fix_max_min(smashed_data, prefix="MAX"):
+def fix_max_min(smashed_data, raw_data, prefix="MAX"):
     """ If there is a value for the maximum data or minimum data but the flag says missing then change the flag to be whatever the accepted flag for the day is. """
 
-    for each_probe in list(smashed_data.keys()):
+    max_attrs = [x for x in sorted(list(smashed_data.keys())) if "_" + prefix + "_DAY" in x and "FLAG" not in x]
 
-        for dt in smashed_data[each_probe].keys():
-            print("each dt is : " + datetime.datetime.strftime(dt, '%Y-%m-%d'))
-            max_attrs = [x for x in smashed_data[each_probe][dt].keys() if "_" + prefix + "_DAY" in x and "FLAG" not in x]
+    if max_attrs == []:
+        return smashed_data
 
-            if max_attrs:
-                for mx in max_attrs:
+    else:
+        for mx in max_attrs:
+            my_flag = mx.rstrip("_DAY") + "_FLAG"
+            test_flag_mean = mx.rstrip("_" + prefix + "_DAY") + "_MEAN_FLAG"
+            test_flag_tot = mx.rstrip("_" + prefix + "_DAY") + "_TOT_FLAG"
+            test_flag_inst = mx.rstrip("_" + prefix + "_DAY") + "_INST_FLAG"
+            if test_flag_mean in sorted(list(smashed_data.keys())):
+                supplement_flag = test_flag_mean
+            elif test_flag_tot in sorted(list(smashed_data.keys())):
+                supplement_flag = test_flag_tot
+            elif test_flag_inst in sorted(list(smashed_data.keys())):
+                supplement_flag = test_flag_inst
+            else:
+                return smashed_data
 
-                    # if the day is not None but the data indicates an 'M'
-                    if smashed_data[each_probe][dt][mx] != None and smashed_data[each_probe][dt][mx.rstrip(prefix + "_DAY") + "_" + prefix + "_FLAG"] == 'M':
+            my_probes = []
+            my_probes = sorted(list(smashed_data[mx].keys()))
 
+            for each_probe in my_probes:
+                my_dates = []
+                my_dates = sorted(list(smashed_data[mx][each_probe].keys()))
+
+                for each_date in my_dates:
+                    # if the day is not None but the data indicates an 'M', then say the day is whatever the actual day is
+                    if str(smashed_data[mx][each_probe][each_date]) != 'None' and str(smashed_data[my_flag][each_probe][each_date]) == 'M':
                         try:
-                            smashed_data[each_probe][dt][mx.rstrip("DAY") + "FLAG"] = smashed_data[each_probe][dt][mx.rstrip("_" + prefix + "_DAY") + "_MEAN_FLAG"]
+                            smashed_data[my_flag][each_probe][each_date] = smashed_data[supplement_flag][each_probe][each_date]
                         except Exception:
-                            try:
-                                smashed_data[each_probe][dt][mx.rstrip("DAY") + "FLAG"] = smashed_data[each_probe][dt][mx.rstrip("_" + prefix + "_DAY") + "_TOT_FLAG"]
-                            except Exception:
-                                import pdb; pdb.set_trace()
-            else:
-                pass
+                            pass
+
+                    else:
+                        pass
 
     return smashed_data
 
-def set_missing_to_none(smashed_data):
-    """ If the data is `present` because it has been calculated but in fact it should be none because it is missing, set that data to None"""
+def clean_up_data(output_dictionary):
+    """ If the data is `present` because it has been calculated but in fact it should be none because it is missing, set that data to None
+    """
+    for each_probe in sorted(list(output_dictionary.keys())):
+        for each_date in sorted(list(output_dictionary[each_probe].keys())):
+            for each_attribute in sorted(list(output_dictionary[each_probe][each_date].keys())):
+
+                if 'MAXTIME' in each_attribute or 'MINTIME' in each_attribute:
+                    try:
+                        this_value = output_dictionary[each_probe][each_date][each_attribute]
+
+                        new_value = (str(this_value.hour) + str(this_value.minute)).zfill(4)
+                        output_dictionary[each_probe][each_date][each_attribute] = new_value
+                    except Exception:
+                        # if you can't make a character of the datetime, you will need to just set it to none
+                        output_dictionary[each_probe][each_date][each_attribute] = 'None'
+
+                #if '_FLAG' in each_attribute and output_dictionary[each_probe][each_date][each_attribute]=='M':
+                    #without_flag = each_attribute.rstrip('_FLAG') + '_DAY'
+                    #if output_dictionary[each_probe][each_date][without_flag] != None:
 
 
-    for each_probe in smashed_data.keys():
-        for dt in smashed_data[each_probe].keys():
-
-            flag_columns = [x for x in smashed_data[each_probe][dt].keys() if "_FLAG" in x]
-            data_columns = [x.rstrip("_FLAG") for x in flag_columns]
-
-            set_to_none = {x+"_DAY": None for x in data_columns if smashed_data[each_probe][dt][x+"_FLAG"]=="M" and x+"_DAY" in smashed_data[each_probe][dt].keys()}
-
-            # if there are values to update, update them
-            if set_to_none != {}:
-                for each_update in set_to_none.keys():
-                    smashed_data[each_probe][dt][each_update] = set_to_none[each_update]
-
-            else:
-                pass
-
-    return smashed_data
+    return output_dictionary
 
 def windrose_fix(smashed_data):
     """ If there are windrose flags in the data, set them to 'M' """
@@ -946,37 +913,102 @@ def windrose_fix(smashed_data):
 
     return smashed_data
 
-
-def daily_information(smashed_template, temporary_smash, temporary_flags, dbcode, daily_entity, raw_data):
-    """ Gets the daily information about the smashed_data from the condensed flags and updates it.
+def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
+    """ Generate appropriate output structures - first get the data together and then get the information with it.
     """
     output_dictionary = {}
+
+    smashed_data = fix_max_min(smashed_data, raw_data, prefix="MAX")
+    smashed_data = fix_max_min(smashed_data, raw_data, prefix="MIN")
+
+    missing_attributes = [x for x in list(smashed_template.keys()) if x not in list(smashed_data.keys())]
+    missing_attributes.remove('ID')
+
+    # First get all the attributes from the data
+    for each_attribute in sorted(list(smashed_data.keys())):
+
+        list_of_probes = []
+        list_of_probes = sorted(list(smashed_data[each_attribute].keys()))
+
+        for each_probe in list_of_probes:
+            list_of_dates = sorted(list(smashed_data[each_attribute][each_probe].keys()))
+
+            for each_date in list_of_dates:
+                this_value = smashed_data[each_attribute][each_probe][each_date]
+
+                if each_probe not in output_dictionary:
+                    output_dictionary[each_probe] = {each_date: {each_attribute: this_value}}
+                elif each_probe in output_dictionary.keys():
+                    if each_date not in output_dictionary[each_probe]:
+                        output_dictionary[each_probe][each_date] = {each_attribute: this_value}
+                    elif each_date in output_dictionary[each_probe]:
+                        if each_attribute not in output_dictionary[each_probe][each_date]:
+                            output_dictionary[each_probe][each_date][each_attribute] = this_value
+                        elif each_attribute in output_dictionary[each_probe][each_date]:
+                            pass
+
+    # a function that turns the date times from the min and max to characters
+    output_dictionary = clean_up_data(output_dictionary)
+
     is_probe = [x for x in smashed_template.keys() if 'PROBE' in x][0]
     is_method = [x for x in smashed_template.keys() if 'METHOD' in x][0]
 
-    #leftovers = [x for x in smashed_template.keys]
+    for each_probe in sorted(list(output_dictionary.keys())):
+        for each_date in sorted(list(output_dictionary[each_probe].keys())):
 
-    for each_probe in smashed_data.keys():
-        for dt in smashed_data[each_probe].keys():
-
-            smashed_data[each_probe][dt]['DBCODE'] = dbcode
-            smashed_data[each_probe][dt][is_probe] = each_probe
-            smashed_data[each_probe][dt]['ENTITY'] = daily_entity
-            smashed_data[each_probe][dt]['SITECODE'] = raw_data[each_probe][dt]['sitecode']
-            smashed_data[each_probe][dt]['DATE'] = datetime.datetime.strftime(dt, '%Y-%m-%d %H:%M:%S')
-            smashed_data[each_probe][dt]['EVENT_CODE'] ='NA'
-            smashed_data[each_probe][dt]['DB_TABLE'] = raw_data[each_probe][dt]['db_table']
-            smashed_data[each_probe][dt]['QC_LEVEL'] = '1P'
-            smashed_data[each_probe][dt][is_method] = raw_data[each_probe][dt][is_method]
-
-            if 'HEIGHT' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt]['HEIGHT'] = raw_data[each_probe][dt]['height']
-            elif 'DEPTH' in smashed_data[each_probe][dt].keys():
-                smashed_data[each_probe][dt]['DEPTH'] = raw_data[each_probe][dt]['depth']
+            if 'DBCODE' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['DBCODE'] = dbcode
             else:
                 pass
 
-    return smashed_data
+            if is_probe not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date][is_probe] = each_probe
+            else:
+                pass
+
+            if 'ENTITY' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['ENTITY'] = daily_entity
+            else:
+                pass
+
+            if 'SITECODE' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['SITECODE'] = raw_data[each_probe][each_date]['sitecode']
+            else:
+                pass
+
+            if 'DATE' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['DATE'] = datetime.datetime.strftime(each_date,'%Y-%m-%d %H:%M:%S')
+            else:
+                pass
+
+            if 'EVENT_CODE' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['EVENT_CODE'] = 'NA'
+            else:
+                pass
+
+            if 'DB_TABLE' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['DB_TABLE'] = raw_data[each_probe][each_date]['db_table']
+            else:
+                pass
+
+            if 'QC_LEVEL' not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date]['QC_LEVEL'] = '1P'
+            else:
+                pass
+
+            if is_method not in output_dictionary[each_probe][each_date]:
+                output_dictionary[each_probe][each_date][is_method] = raw_data[each_probe][each_date][is_method]
+            else:
+                pass
+
+            if 'HEIGHT' in missing_attributes:
+                output_dictionary[each_probe][each_date]['HEIGHT'] = raw_data[each_probe][each_date]['height']
+            elif 'DEPTH' in missing_attributes:
+                output_dictionary[each_probe][each_date]['DEPTH'] = raw_data[each_probe][each_date]['depth']
+            else:
+                pass
+
+    return output_dictionary
 
 
 def get_methods_for_all_probes(cur, *sd):
@@ -1055,35 +1087,41 @@ def get_methods_for_all_probes(cur, *sd):
 
     return hr_methods, daily_methods
 
-def insert_data(cur, smashed_data, daily_index):
+def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
     """ Create a SQL statement for inserting your data back into the database.
 
     The `var_types` variable uses the meta-information about the variable to figure out what type to assign it in the database.
     """
 
-    for each_probe in smashed_data.keys():
-        for dt in sorted(smashed_data[each_probe].keys()):
+    tuple_list = []
 
-            sorted_keys = sorted(smashed_data[each_probe][dt].keys())
-            sorted_keys.remove('ID')
-            tuple_data = [smashed_data[each_probe][dt][x] for x in sorted_keys]
+    for each_probe in sorted(list(output_dictionary.keys())):
+        for each_date in sorted(list(output_dictionary[each_probe].keys())):
+
+            sorted_keys = sorted(list(output_dictionary[each_probe][each_date].keys()))
+            tuple_data = [output_dictionary[each_probe][each_date][x] for x in sorted_keys]
 
             # this works for ms00501 ....
             converter = lambda x: '%s' if x =='str' else '%d'
-            var_types = [converter(x.__class__.__name__) for x in tuple_data]
+            #var_types = [converter(x.__class__.__name__) for x in tuple_data]
 
-            import pdb; pdb.set_trace()
+            tuple_list.append(tuple(tuple_data))
+            #print("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
 
-            print("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
+            #print("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
+    var_types = [converter(x.__class__.__name__) for x in tuple_list[0]]
+
+    cur.executemany("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple_list)
+
+    import pdb; pdb.set_trace()
             # The following SQL is constructed (raw) like this, FYI
             #cursor.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (%s, %d, %s, %d, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s)", tuple(tuple_data))
 
-            cur.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple(tuple_data))
+            #cur.execute("insert into LTERLogger_Pro.dbo." + output_dictionary[each_probe][each_date]['DBCODE'] + output_dictionary[each_probe][each_date]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple(tuple_data))
 
+    print("check the sql!")
 
-            print("check the sql!")
-
-            #conn.commit()
+    #conn.commit()
 
 def detect_recent_data(cur, smashed_data, each_probe, dt):
     """ Detect the most recent dt in the daily data before updating. Does not return a start date if there's not one in there.
@@ -1122,7 +1160,7 @@ if __name__ == "__main__":
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
     desired_database = 'MS043'
-    desired_daily_entity = '01'
+    desired_daily_entity = '02'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
@@ -1134,31 +1172,12 @@ if __name__ == "__main__":
 
     # calculate daily flags
     temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash)
-    #more_smash = fill_in_missing_dates(temporary_smash, smashed_data)
 
+    # create some output structure containing both the data and the flags
+    smashed_data = unite_data(temporary_smash, temporary_flags)
 
-    create_outs(raw_data, smashed_template, temporary_smash, temporary_flags)
+    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity)
 
-    import pdb; pdb.set_trace()
-    # add some information
-    informed_smash = daily_information(smashed_template, temporary_smash, temporary_flags,dbcode, daily_entity, raw_data)
-
-    # create the daily flags
-    # smashed_data_out = calculate_daily_flags(raw_data, column_names, smashed_data_out)
-
-    # # fixes the windrose if needed
-    # smashed_data_out = windrose_fix(smashed_data_out)
-
-    # # fixes min/max flags associated with a min/max flag that is 'missing'
-    # smashed_data_out = fix_max_min(smashed_data_out, prefix="MAX")
-    # smashed_data_out = fix_max_min(smashed_data_out, prefix="MIN")
-
-    # # any values which are missing but not none should be none
-    # #smashed_data_out = set_missing_to_none(smashed_data_out)
-    # # at the very end, add the fluff
-    # smashed_data_out = daily_information(smashed_data_out, desired_database, desired_daily_entity, daily_columns, raw_data)
-
-
-    # insert_data(cur, smashed_data_out, daily_index)
+    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity)
 
     print("the end")

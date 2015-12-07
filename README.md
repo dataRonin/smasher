@@ -1,7 +1,7 @@
 Smasher3
----------
+========
 
-some good things
+Smasher3 is a better smasher.
 
 
 NOTE!
@@ -24,6 +24,8 @@ To run this program you'll need to create a file called `form_connection.py`. In
 		    return conn, cur
 
 I have purposely left this file in .gitignore for safety.
+
+Here's some things you may encounter as you are working with the code of smasher3 and wonder about.
 
 
 hr_methods and daily_methods
@@ -124,9 +126,6 @@ After running the update:
 		17.3
 
 
-
-
-
 		Apr  9 2015 01:20:00:000PM	16.5	16.7
 		Apr  9 2015 01:25:00:000PM	16.8	17.1
 		Apr  9 2015 01:30:00:000PM	17.0	17.2
@@ -135,3 +134,17 @@ After running the update:
 		Apr  9 2015 01:45:00:000PM	16.6	17.2
 		Apr  9 2015 01:50:00:000PM	16.8	17.3
 		Apr  9 2015 01:55:00:000PM	17.0	17.3
+
+It works also for the min:
+
+	(Pdb) temporary_smash['AIRTEMP_MIN_DAY']['AIRPRI07'][datetime.datetime(2014,12,31,0,0)]
+	-8.0
+
+	(Pdb) temporary_smash['AIRTEMP_MINTIME']['AIRPRI07'][datetime.datetime(2014,12,31,0,0)]
+	datetime.datetime(2014, 12, 31, 3, 55)
+
+	Dec 31 2014 03:45:00:000AM	-7.9	NULL
+	Dec 31 2014 03:50:00:000AM	-7.9	NULL
+	Dec 31 2014 03:55:00:000AM	-8.0	NULL
+	Dec 31 2014 04:00:00:000AM	-7.8	NULL
+	Dec 31 2014 04:05:00:000AM	-7.9	NULL
