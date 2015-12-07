@@ -12,7 +12,7 @@ def max_if_none(data_list):
     """ Computes a maximum even if there are none values in the data, or returns None.
     """
     try:
-        return max([float(x) for x in data_list if x != None])
+        return max([float(x) for x in data_list if x != 'None' and x !=None])
     except Exception:
         return None
 
@@ -20,7 +20,7 @@ def min_if_none(data_list):
     """ Computes a minimum even if there are none values, or returns None.
     """
     try:
-        return min([float(x) for x in data_list if x != None])
+        return min([float(x) for x in data_list if x != 'None' and x !=None])
     except Exception:
         return None
 
@@ -83,19 +83,24 @@ def max_vpd_if_none(airtemp_list, relhum_list, ind=False):
 
         vpd_1 = [((100-isfloat(y))*0.01)*satvp(x) for x, y in zip(airtemp_list, relhum_list) if x != 'None' and x != None and y != 'None' and y != None]
 
-        vpd = max_if_none(vpd_1)
+        max_vpd = max_if_none(vpd_1)
 
         if ind != False:
             try:
                 max_index = vpd_1.index(max_if_none(vpd_1))
-                return (vpd, max_index)
+                return (max_vpd, max_index)
+
             except Exception:
                 return (None, None)
         else:
-            return vpd
+            return max_vpd
 
     except Exception:
-        return None
+
+        if ind == False:
+            return None
+        else:
+            return (None, None)
 
 
 def min_vpd_if_none(airtemp_list, relhum_list, ind=False):
@@ -106,19 +111,22 @@ def min_vpd_if_none(airtemp_list, relhum_list, ind=False):
 
         vpd_1 = [((100-isfloat(y))*0.01)*satvp(x) for x, y in zip(airtemp_list, relhum_list) if x != 'None' and x != None and y != 'None' and y != None]
 
-        vpd = min_if_none(vpd1)
+        min_vpd = min_if_none(vpd_1)
 
         if ind != False:
             try:
                 min_index = vpd_1.index(min_if_none(vpd_1))
-                return (vpd, min_index)
+                return (min_vpd, min_index)
             except Exception:
                 return (None, None)
         else:
-            return vpd
+            return min_vpd
 
     except Exception:
-        return None
+        if ind == False:
+            return None
+        else:
+            return (None, None)
 
 
 def satvp_if_none(data_list):
@@ -214,16 +222,16 @@ def min_vap_if_none(airtemp_list, relhum_list, ind=False):
 
         vap_1 = [vap(x,y) for x,y in zip(airtemp_list, relhum_list)]
 
+        min_vap = min_if_none(vap_1)
+
         if ind != False:
             try:
                 min_index = vap_1.index(min_if_none(vap_1))
-                return min_vap, min_index
+                return (min_vap, min_index)
             except Exception:
                 return (None, None)
         else:
             return min_vap
-
-        return min_if_none([vap(x,y) for x,y in zip(airtemp_list, relhum_list)])
 
     except Exception:
         return None
