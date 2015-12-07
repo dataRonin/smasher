@@ -805,7 +805,8 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     # totals
     if is_tot != []:
         for each_total_col in is_tot:
-            tot, _ = daily_functions_normal(raw_data, is_tot, sum_if_none, xt)
+            tot, _ = daily_functions_normal(raw_data, each_total_col, sum_if_none, xt)
+            temporary_smash.update({day_attribute(each_total_col) : tot})
 
     return temporary_smash
 
@@ -924,8 +925,15 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
     missing_attributes = [x for x in list(smashed_template.keys()) if x not in list(smashed_data.keys())]
     missing_attributes.remove('ID')
 
+    additional_attributes = [x for x in smashed_data.keys() if x not in smashed_template.keys()]
+
+    # remove from the list of attributes the ones which shouldn't be in the output.
+    attribute_list = sorted(list(smashed_data.keys()))
+    if additional_attributes != []:
+        attribute_list.remove(additional_attributes)
+
     # First get all the attributes from the data
-    for each_attribute in sorted(list(smashed_data.keys())):
+    for each_attribute in attribute_list:
 
         list_of_probes = []
         list_of_probes = sorted(list(smashed_data[each_attribute].keys()))
@@ -1113,7 +1121,7 @@ def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
 
     cur.executemany("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple_list)
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
             # The following SQL is constructed (raw) like this, FYI
             #cursor.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (%s, %d, %s, %d, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s)", tuple(tuple_data))
 
@@ -1160,7 +1168,7 @@ if __name__ == "__main__":
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
     desired_database = 'MS043'
-    desired_daily_entity = '02'
+    desired_daily_entity = '03'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
