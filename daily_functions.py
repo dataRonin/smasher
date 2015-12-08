@@ -47,7 +47,7 @@ def daily_functions_vpd(raw_data, vpd_list, valid_columns, function_choice, xt):
         elif xt == True:
 
             # get the data outside of the tuple, so you don't need to index later
-            data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=False) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+            data = {each_probe:{dt: rounder2(function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=False)) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
             # get the time stamps in the tuple
             try:
@@ -97,7 +97,11 @@ def daily_functions_normal(raw_data, column_name, function_choice, xt):
 
             data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][column_name]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
-            data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+            try:
+                data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+            except Exception:
+                # solar uses integers
+                data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(int(function_choice(raw_data[each_probe][dt][column_name]))))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
             return data, data2
 
@@ -123,3 +127,4 @@ def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choi
     data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][speed_cols], raw_data[each_probe][dt][dir_cols]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
     return data
+

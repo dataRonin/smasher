@@ -1,15 +1,32 @@
 from smasher3 import *
 import sys
 
+print("\"<grunt> SMASHER SMASH DATA! <grunt>\"")
 
-if len(sys.argv) >= 1:
+if len(sys.argv) == 5:
+	print("You have provided all the inputs: database, entity, start, end")
 	desired_database = sys.argv[1]
 	desired_daily_entity = sys.argv[2]
 	desired_start_day = sys.argv[3]
 	desired_end_day = sys.argv[4]
 
-else:
+elif len(sys.argv) == 4:
+	print("Today will be used as the final date. The beginning date has been specified")
+	desired_database = sys.argv[1]
+	desired_daily_entity = sys.argv[2]
+	desired_start_day = sys.argv[3]
+	desired_end_day = datetime.datetime.strftime(datetime.datetime.now().year, datetime.datetime.now().month, datetime.datetime.now().day, '%Y-%m-%d %H:%M:%S')
+elif len(sys.argv) == 3:
+	desired_database = sys.argv[1]
+	desired_daily_entity = sys.argv[2]
+	desired_start_day, desired_end_day = detect_recent_data(cur, desired_database, desired_daily_entity)
 
+elif len(sys.argv) == 2:
+	desired_database = sys.argv[1]
+	print("All tables in " + desired_database + " will be processed from the last complete day")
+
+elif len(sys.argv) == 1:
+	print("All tables in all databases will be processed from the last complete day.")
 
 try:
     # This is imported from `form_connection.py`
@@ -43,7 +60,7 @@ raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map
 temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
 # calculate daily flags
-temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash)
+temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
 # create some output structure containing both the data and the flags
 smashed_data = unite_data(temporary_smash, temporary_flags)

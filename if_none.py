@@ -51,7 +51,6 @@ def mean_if_none(data_list):
     rounder = lambda x: round(x,2)
 
     if all(x is None for x in data_list) != True:
-
         try:
             return rounder(sum([isfloat(x) for x in data_list if x != 'None' and x != None])/len([x for x in data_list if x != 'None' and x != None]))
         except Exception:

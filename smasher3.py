@@ -472,15 +472,27 @@ def cleanse(x):
     """
     return x.lstrip('LTERLogger_pro.dbo.MS0431').lstrip('2.').lstrip('8.').lstrip('1.')
 
-def calculate_daily_flags(raw_data, column_names, temporary_smash):
+def calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template):
     """ Daily flags computed with flag_count function.
 
     `flag_count` function creates a defaultdict. we find the columns in the high-resolution (raw) data that have flags and compute flags for them by counting the number of each unique key during that day.
     """
     temporary_flags ={}
 
+    # what are the flags in the day we will need?
+    flags_in_day = [x for x in smashed_template.keys() if "FLAG" in x]
+
     # find the columns that contain flags and remove the FLAG_PRO column
     flag_columns = column_names[3:column_names.index('DATE_TIME')]
+
+    # if there's some daily flag that doesn't have a high resolution partner
+    if flags_in_day != flag_columns:
+        # add it to that day
+        for each_flag in flags_in_day:
+            if each_flag in flag_columns:
+                continue
+            elif each_flag not in flag_columns:
+                flag_columns.append(each_flag)
 
     # remove provisional columns and saturated vapor pressure (not used in daily)
     for x in flag_columns:
@@ -493,9 +505,28 @@ def calculate_daily_flags(raw_data, column_names, temporary_smash):
 
     for each_flag in valid_columns:
         # note that at this point, the 'min flags' and 'max flags' may appear to be 'missing' even if a value is there.
-        data_flags = {each_probe:{dt: daily_flag(flag_count(raw_data[each_probe][dt][each_flag]), raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+        try:
+            data_flags = {each_probe:{dt: daily_flag(flag_count(raw_data[each_probe][dt][each_flag]), raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
-        temporary_flags.update({each_flag:data_flags})
+            temporary_flags.update({each_flag:data_flags})
+
+        except KeyError:
+
+            # because VAP_MAX_FLAG not indicated in MS04318.
+            try:
+                # there's a daily max or min, but no five minute max or min, and no indication we'd measure it.
+                if 'MAX' in each_flag or 'MIN' in each_flag:
+                    # remove '_flag' and put in '_day', check data columns for this. try to find a '_mean_flag' as a replacement.
+                    converted_name = each_flag.rstrip('_FLAG') + '_DAY'
+
+                    if converted_name in temporary_smash.keys() and each_flag.split('_')[0]+"_MEAN_FLAG" in flag_columns:
+
+                        data_flags = {each_probe:{dt: daily_flag(flag_count(raw_data[each_probe][dt][each_flag.split('_')[0]+"_MEAN_FLAG"]), raw_data[each_probe][dt]['critical_value'], raw_data[each_probe][dt]['critical_flag']) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+
+                        temporary_flags.update({each_flag: data_flags})
+
+            except Exception:
+                import pdb; pdb.set_trace()
 
     return temporary_flags
 
@@ -847,22 +878,19 @@ def clean_up_data(output_dictionary):
     """
     for each_probe in sorted(list(output_dictionary.keys())):
         for each_date in sorted(list(output_dictionary[each_probe].keys())):
-            for each_attribute in sorted(list(output_dictionary[each_probe][each_date].keys())):
 
+            this_list = sorted(list(output_dictionary[each_probe][each_date].keys()))
+
+            for each_attribute in this_list:
                 if 'MAXTIME' in each_attribute or 'MINTIME' in each_attribute:
                     try:
                         this_value = output_dictionary[each_probe][each_date][each_attribute]
-
                         new_value = (str(this_value.hour) + str(this_value.minute)).zfill(4)
                         output_dictionary[each_probe][each_date][each_attribute] = new_value
+
                     except Exception:
                         # if you can't make a character of the datetime, you will need to just set it to none
                         output_dictionary[each_probe][each_date][each_attribute] = 'None'
-
-                #if '_FLAG' in each_attribute and output_dictionary[each_probe][each_date][each_attribute]=='M':
-                    #without_flag = each_attribute.rstrip('_FLAG') + '_DAY'
-                    #if output_dictionary[each_probe][each_date][without_flag] != None:
-
 
     return output_dictionary
 
@@ -893,8 +921,8 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
     smashed_data = fix_max_min(smashed_data, raw_data, prefix="MAX")
     smashed_data = fix_max_min(smashed_data, raw_data, prefix="MIN")
 
-
     missing_attributes = [x for x in list(smashed_template.keys()) if x not in list(smashed_data.keys())]
+
     missing_attributes.remove('ID')
 
     additional_attributes = [x for x in smashed_data.keys() if x not in smashed_template.keys()]
@@ -919,12 +947,16 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
 
                 if each_probe not in output_dictionary:
                     output_dictionary[each_probe] = {each_date: {each_attribute: this_value}}
+
                 elif each_probe in output_dictionary.keys():
+
                     if each_date not in output_dictionary[each_probe]:
                         output_dictionary[each_probe][each_date] = {each_attribute: this_value}
                     elif each_date in output_dictionary[each_probe]:
+
                         if each_attribute not in output_dictionary[each_probe][each_date]:
                             output_dictionary[each_probe][each_date][each_attribute] = this_value
+
                         elif each_attribute in output_dictionary[each_probe][each_date]:
                             pass
 
@@ -990,8 +1022,7 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
                 output_dictionary[each_probe][each_date]['HEIGHT'] = raw_data[each_probe][each_date]['height']
             elif 'DEPTH' in missing_attributes:
                 output_dictionary[each_probe][each_date]['DEPTH'] = raw_data[each_probe][each_date]['depth']
-            else:
-                pass
+
 
     return output_dictionary
 
@@ -1072,7 +1103,7 @@ def get_methods_for_all_probes(cur, *sd):
 
     return hr_methods, daily_methods
 
-def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
+def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity, smashed_template):
     """ Create a SQL statement for inserting your data back into the database.
 
     The `var_types` variable uses the meta-information about the variable to figure out what type to assign it in the database.
@@ -1084,7 +1115,9 @@ def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
         for each_date in sorted(list(output_dictionary[each_probe].keys())):
 
             sorted_keys = sorted(list(output_dictionary[each_probe][each_date].keys()))
+
             tuple_data = [output_dictionary[each_probe][each_date][x] for x in sorted_keys]
+            #tuple_data = [output_dictionary[each_probe][each_date].get(x,'None') for x in sorted_keys]
 
             # this works for ms00501 ....
             converter = lambda x: '%s' if x =='str' else '%d'
@@ -1094,30 +1127,30 @@ def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
             #print("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
 
             #print("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")")
+
     var_types = [converter(x.__class__.__name__) for x in tuple_list[0]]
 
     cur.executemany("insert into LTERLogger_Pro.dbo." + dbcode + daily_entity + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple_list)
 
-    #import pdb; pdb.set_trace()
-            # The following SQL is constructed (raw) like this, FYI
-            #cursor.execute("insert into LTERLogger_Pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (%s, %d, %s, %d, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s)", tuple(tuple_data))
-
-            #cur.execute("insert into LTERLogger_Pro.dbo." + output_dictionary[each_probe][each_date]['DBCODE'] + output_dictionary[each_probe][each_date]['ENTITY'] + " (" + ", ".join(sorted_keys) +") VALUES (" + ", ".join(var_types) + ")", tuple(tuple_data))
 
     print("check the sql!")
 
     conn.commit()
 
-def detect_recent_data(cur, smashed_data, each_probe, dt):
+def detect_recent_data(cur, dbcode, daily_entity):
     """ Detect the most recent dt in the daily data before updating. Does not return a start date if there's not one in there.
     """
 
     try:
-        sql= "select top 1 date from lterlogger_pro.dbo." + smashed_data[each_probe][dt]['DBCODE'] + smashed_data[each_probe][dt]['ENTITY'] + " order by date desc"
+        sql= "select top 1 date from lterlogger_pro.dbo." + dbcode + daily_entity + " order by date desc"
         cur.execute(sql)
         last_date = cur.fetchone()
-        desired_start_date = last_date[0] + datetime.timedelta(days=1)
-        return desired_start_date
+        desired_start_date = datetime.datetime.strftime(last_date[0] + datetime.timedelta(days=1),'%Y-%m-%d %H:%M:%S')
+
+        today = (datetime.datetime.now().year, datetime.datetime.now().month, datetime.datetime.now().day)
+        desired_end_day = datetime.datetime.strftime(today, '%Y-%m-%d %H:%M:%S')
+
+        return desired_start_date, desired_end_day
     except Exception:
         print("no data found, beginning with water year")
         return ""
@@ -1145,9 +1178,12 @@ if __name__ == "__main__":
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
     desired_database = 'MS043'
-    desired_daily_entity = '04'
-    desired_start_day = '2014-10-01 00:00:00'
+    desired_daily_entity = '21'
+    desired_start_day = '2014-10-31 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
+
+    if desired_daily_entity == '06' and desired_database == 'MS043':
+        print("soil moisture potential - 06 and 16 - is not valid currently")
 
     # returns are the names of the columns in the
     raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
@@ -1156,15 +1192,16 @@ if __name__ == "__main__":
     temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
     # calculate daily flags
-    temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash)
+    temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
     # create some output structure containing both the data and the flags
     smashed_data = unite_data(temporary_smash, temporary_flags)
 
+    #import pdb; pdb.set_trace()
+
     output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity)
 
 
-
-    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity)
+    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
 
     print("the end")
