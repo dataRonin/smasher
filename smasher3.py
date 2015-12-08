@@ -229,14 +229,6 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
     return raw_data, column_names, xt, smashed_template
 
 
-def generate_smashed_data(smashed_template, raw_data):
-    """ Creates an output structure for `smashed data` that contains the daily columns with each probe, each day, and the appropriate headers for the output dictionary.
-    """
-    smashed_data = {each_probe:{dt:smashed_template for dt, raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
-
-    return smashed_data
-
-
 def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily_methods, sd, ed, xt):
     """ Bring in the high-resolution data from SQL server.
 
@@ -507,26 +499,6 @@ def calculate_daily_flags(raw_data, column_names, temporary_smash):
 
     return temporary_flags
 
-def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choice, output_name="DIR"):
-    """ For functions like wind that need both a speed and a direction
-    """
-    dir_cols = [x for x in is_windpro if 'DIR' in x and 'STDDEV' not in x][0]
-    mag_cols = [x for x in is_windpro if 'MAG' in x][0]
-    speed_cols = [x for x in valid_columns if 'SPD' in x][0]
-
-    rounder = lambda x: round(x,3) if x != 'None' and x != None else None
-
-    if 'DIR' in output_name:
-        this_attribute = str(dir_cols)
-    elif 'MAG' in output_name:
-        this_attribute = str(mag_cols)
-
-
-    data = {each_probe:{dt:{each_attribute: rounder(function_choice(raw_data[each_probe][dt][speed_cols], raw_data[each_probe][dt][dir_cols])) for each_attribute, raw_data[each_probe][dt][each_attribute] in raw_data[each_probe][dt].items() if each_attribute == this_attribute} for dt,raw_data[each_probe][dt] in raw_data[each_probe].items()} for each_probe, raw_data[each_probe] in raw_data.items()}
-
-    return data
-
-
 def comprehend_daily(smashed_template, raw_data, column_names, xt):
     """ Aggregates the raw data based on column names. Performs basic sums, means, etc. by calling functions in the file `if_none.py`
 
@@ -559,11 +531,24 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     for each_column in is_min:
         valid_columns.remove(each_column)
 
-    # if it contains propellor anemometer it should say 'PRO' - but wind speed pro is just a mean
+    # if it contains propellor anemometer it should say 'PRO' - speed is regular and that's okay because we can use the maxtime functions more easily there
     is_windpro = [x for x in data_columns if 'PRO' in x and 'SPD' not in x]
 
     for each_column in is_windpro:
         valid_columns.remove(each_column)
+
+    if is_windpro != []:
+
+        dir_name = [x for x in is_windpro if 'DIR' in x and 'STDDEV' not in x][0]
+        mag_name = [x for x in is_windpro if 'MAG' in x][0]
+        dir_dev_name = [x for x in is_windpro if 'STDDEV' in x][0]
+
+        mean_direction = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_dir_if_none, output_name="DIR")
+        mean_magnitude = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_mag_if_none, output_name="MAG")
+        mean_stddev, _ = daily_functions_normal(raw_data, dir_name, wind_std_if_none, xt)
+        temporary_smash.update({day_attribute(dir_name) : mean_direction})
+        temporary_smash.update({day_attribute(mag_name) : mean_magnitude})
+        temporary_smash.update({day_attribute(dir_dev_name) : mean_stddev})
 
     # if it contains sonic, it should say 'SNC' -- remove all but max
     is_windsnc = [x for x in data_columns if 'SNC' in x]
@@ -571,10 +556,11 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     for each_column in is_windsnc:
         valid_columns.remove(each_column)
 
+    if is_windsnc != []:
         # regular mean
         columns_for_a_regular_mean = [x for x in is_windsnc if 'DIR' not in x and 'STDDEV' not in x and 'MAX' not in x]
         # mean for all the mean stuff
-        mean_data_from_mean_snc, _ = daily_functions(raw_data, columns_for_a_regular_mean, mean_if_none, xt)
+        mean_data_from_mean_snc, _ = daily_functions_normal(raw_data, columns_for_a_regular_mean, mean_if_none, xt)
 
         # max only on speed
         columns_for_a_max = [x for x in is_windsnc if 'MAX' in x]
@@ -601,13 +587,11 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     for each_column in is_tot:
         valid_columns.remove(each_column)
 
-
     # if it says "INST" its instantaneous
     is_inst = [x for x in data_columns if 'INST' in x]
 
     for each_column in is_inst:
         valid_columns.remove(each_column)
-
 
     # for the VPD --> (the daily aggregation functions are in `daily_functions.py`)
     do_vpd = [x for x in data_columns if 'VPD' in x]
@@ -657,8 +641,13 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
             mean_data_from_mean, _ = daily_functions_normal(raw_data, each_column, mean_if_none, xt)
             temporary_smash.update({day_attribute(each_column) : mean_data_from_mean})
 
+
             max_name = each_column.split("_")[0] + "_MAX_DAY"
             min_name = each_column.split("_")[0] + "_MIN_DAY"
+
+            if is_windpro != []:
+                max_name = each_column.split("_")[0] + "_PRO_MAX_DAY"
+                min_name = each_column.split("_")[0] + "_PRO_MIN_DAY"
 
             # maximums from mean
             if max_name in smashed_template.keys() and xt == True:
@@ -792,16 +781,6 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
             else:
                 pass
 
-    # if wind pro isn't empty, compute wind stuff
-    if is_windpro != []:
-
-        std_cols = [x for x in is_windpro if 'STDDEV' in x]
-        wind_std, _ = daily_functions(raw_data, std_cols, wind_std_if_none, xt)
-
-        # we will only have one speed and direction from the props, so we can know this will always have a length of 1 and the value is in index 0.
-        mean_dir = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_dir_if_none, output_name="DIR")
-        mean_mag = daily_functions_speed_dir(raw_data, is_windpro, valid_columns, wind_mag_if_none, output_name="MAG")
-
     # totals
     if is_tot != []:
         for each_total_col in is_tot:
@@ -887,32 +866,24 @@ def clean_up_data(output_dictionary):
 
     return output_dictionary
 
-def windrose_fix(smashed_data):
+def windrose_fix(output_dictionary):
     """ If there are windrose flags in the data, set them to 'M' """
 
-    for each_probe in smashed_data.keys():
-        for dt in smashed_data[each_probe].keys():
+    # check for wind rose columns and return if there aren't any
+    rose_flag_columns = [x for x in sorted(list(smashed_template.keys())) if "_FLAG" in x and "ROSE" in x]
 
-            # check for wind rose columns and return if there aren't any
-            rose_flag_columns = [x for x in smashed_data[each_probe][dt].keys() if "_FLAG" in x and "ROSE" in x]
+    for each_probe in sorted(list(output_dictionary.keys())):
+        for dt in sorted(list(output_dictionary[each_probe].keys())):
 
-            if rose_flag_columns == []:
-                return smashed_data
-            else:
-                data_columns = [x.rstrip("_FLAG")+"_DAY" for x in rose_flag_columns]
-
-                # set wind rose flags to M if wind rose is missing
-                set_to_m = {x: "M" for x in rose_flag_columns if smashed_data[each_probe][dt][x.rstrip("_FLAG") + "_DAY"]== None or smashed_data[each_probe][dt][x.rstrip("_FLAG") + "_DAY"] =='None'}
-
-                # if there are values to update, update them
-                if set_to_m != {}:
-                    for each_update in set_to_m.keys():
-                        smashed_data[each_probe][dt][each_update] = set_to_m[each_update]
-
-                else:
+            for each_column in rose_flag_columns:
+                data_column = each_column.rstrip("_FLAG") + "_DAY"
+                if each_column not in output_dictionary[each_probe][dt]:
+                    output_dictionary[each_probe][dt][each_column] = 'M'
+                    output_dictionary[each_probe][dt][data_column] = None
+                elif each_column in output_dictionary[each_probe][dt]:
                     pass
 
-    return smashed_data
+    return output_dictionary
 
 def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
     """ Generate appropriate output structures - first get the data together and then get the information with it.
@@ -922,6 +893,7 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
     smashed_data = fix_max_min(smashed_data, raw_data, prefix="MAX")
     smashed_data = fix_max_min(smashed_data, raw_data, prefix="MIN")
 
+
     missing_attributes = [x for x in list(smashed_template.keys()) if x not in list(smashed_data.keys())]
     missing_attributes.remove('ID')
 
@@ -930,7 +902,8 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
     # remove from the list of attributes the ones which shouldn't be in the output.
     attribute_list = sorted(list(smashed_data.keys()))
     if additional_attributes != []:
-        attribute_list.remove(additional_attributes)
+        for x in additional_attributes:
+            attribute_list.remove(x)
 
     # First get all the attributes from the data
     for each_attribute in attribute_list:
@@ -957,6 +930,10 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
 
     # a function that turns the date times from the min and max to characters
     output_dictionary = clean_up_data(output_dictionary)
+
+
+    if daily_entity == '04':
+        output_dictionary = windrose_fix(output_dictionary)
 
     is_probe = [x for x in smashed_template.keys() if 'PROBE' in x][0]
     is_method = [x for x in smashed_template.keys() if 'METHOD' in x][0]
@@ -1129,7 +1106,7 @@ def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity):
 
     print("check the sql!")
 
-    #conn.commit()
+    conn.commit()
 
 def detect_recent_data(cur, smashed_data, each_probe, dt):
     """ Detect the most recent dt in the daily data before updating. Does not return a start date if there's not one in there.
@@ -1168,7 +1145,7 @@ if __name__ == "__main__":
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
     desired_database = 'MS043'
-    desired_daily_entity = '03'
+    desired_daily_entity = '04'
     desired_start_day = '2014-10-01 00:00:00'
     desired_end_day = '2015-04-10 00:00:00'
 
@@ -1185,6 +1162,8 @@ if __name__ == "__main__":
     smashed_data = unite_data(temporary_smash, temporary_flags)
 
     output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity)
+
+
 
     insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity)
 

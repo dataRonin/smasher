@@ -1,6 +1,16 @@
 from smasher3 import *
 import sys
 
+
+if len(sys.argv) >= 1:
+	desired_database = sys.argv[1]
+	desired_daily_entity = sys.argv[2]
+	desired_start_day = sys.argv[3]
+	desired_end_day = sys.argv[4]
+
+else:
+
+
 try:
     # This is imported from `form_connection.py`
     # conn is the connection for doing updates - you can only ever have 1 conn
@@ -18,9 +28,11 @@ daily_index = is_daily(database_map)
 # for example, hr_methods['RELh1502'] ={0:{'critical_value' : 95, 'height' : 150, 'resolution' : '15 minutes'}}. See README.md.
 hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
+
+
 ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
-desired_database = 'MS043'
-desired_daily_entity = '02'
+desired_database = 'MS034'
+desired_daily_entity = '04'
 desired_start_day = '2014-10-01 00:00:00'
 desired_end_day = '2015-04-10 00:00:00'
 

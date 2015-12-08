@@ -102,4 +102,24 @@ def daily_functions_normal(raw_data, column_name, function_choice, xt):
             return data, data2
 
         else:
-            print("error in function for computing vpd means/max/mins")
+            print("error in function for computing means/max/mins")
+
+def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choice, output_name="DIR"):
+
+    """ For functions like wind that need both a speed and a direction
+    """
+    dir_cols = [x for x in is_windpro if 'DIR' in x and 'STDDEV' not in x][0]
+    mag_cols = [x for x in is_windpro if 'MAG' in x][0]
+    speed_cols = [x for x in valid_columns if 'SPD' in x][0]
+
+    rounder = lambda x: round(x,3) if x != 'None' and x != None else None
+
+    if 'DIR' in output_name:
+        this_attribute = str(dir_cols)
+
+    elif 'MAG' in output_name:
+        this_attribute = str(mag_cols)
+
+    data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][speed_cols], raw_data[each_probe][dt][dir_cols]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+
+    return data
