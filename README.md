@@ -2,20 +2,36 @@ Smasher3
 ========
 
 Smasher3 is a better smasher.
-NOTE: This was super rushed code. It WILL break. Yes. It will. The `smash.py` interface HAS NOT been well tested. In general I have been using the `smasher3.py` main loop, which is found at the end of the script under `if __name__ == "__main__":`.
+NOTE: This was super rushed code. It WILL break. Yes. It will. The `smash.py` interface HAS NOT been well-tested. In general I have been using the `smasher3.py` main loop, which is found at the end of the script under `if __name__ == "__main__":`.
 
-I have tried `smash.py` only on MS00521. That's all! and I tried it in full enumeration, not detecting.
+I have tried and successfully run `smasher3.py` from `smash.py` for MS04301 from 2015-04-10 00:00:00 to current data, on all of MS00521, and then to repopulate MS005 in its entirety. I also attempted to run it on HT004, but there was no high resolution data present.
 
-Here's what you need to do if you use `smash.py` -- up to 4 arguments, with single quotes on all of them.
 
-- 1st is the DBCode
-- 2nd is the Entity
-- 3rd is the start day minus 1.
-- 4th is the end day
+`smash.py` : the interface part
+-------
+
+Here's what you need to do if you use `smash.py` -- pass it up to 4 arguments, with single quotes on all of them.
+
+- 1st is the DBCode (ex. 'MS043')
+- 2nd is the DAILY Entity, left padded with a '0' if < 10. (ex. '02')
+- 3rd is the start day minus one day (ex. '2015-10-20 00:00:00' - this would start the analysis on 2015-10-21 00:00:00)
+- 4th is the end day for the analysis (or if you pass it nothing, it will default to "today", and stop when it stops.)
 
 (The reason for option 3 is because in the automated script, the last detected day has one day added to it, so this takes the same parameter, and it needs to be behind one day of where you want to start)
 
+
+Ex. of the four-argument style:
+
 		Foxs-MacBook-Pro:smasher dataronin$ python smash.py 'MS005' '21' '2015-01-01 00:00:00' '2015-07-10 00:00:00'
+
+
+Ex. of the two-argument style:
+
+		Foxs-MacBook-Pro:smasher dataronin$ python smash.py 'MS005'
+
+
+`smasher3.py` : the main script that you can also use
+-------
 
 
 In the main `smasher3.py` file, scroll to the end, and you can manipulate around line 1200 this section:
@@ -28,13 +44,13 @@ In the main `smasher3.py` file, scroll to the end, and you can manipulate around
 
 Change those four values to be like what is in the `smash.py` arguments. They are exact matches.
 
-Basically `smash.py` is just a wrapper around those.
+Basically `smash.py` is just a wrapper around these lines of code, with a variable number of arguments.
 
 If the end isn't given, it should use "today".
 
 If the start isn't given, it should use the last given date in the database for the daily, and if that doesn't exist, the whole of the high-resolution, and if that doesn't exist, of course, it will fail.
 
-If the entity isn't given, the whole of that `desired_database` will be processed. Which may not work for `MS04310` because I haven't tested it.
+If the entity isn't given, the whole of that `desired_database` will be processed. Currently, `MS04310` has not been well-tested.
 
 If nothing is given, everything is processed, which will probably take quite a while.
 
@@ -302,6 +318,12 @@ It works also for the min:
 		Dec 31 2014 03:55:00:000AM	-8.0	NULL
 		Dec 31 2014 04:00:00:000AM	-7.8	NULL
 		Dec 31 2014 04:05:00:000AM	-7.9	NULL
+
+
+The helper files
+----
+
+There are two files that "help" `smasher3.py`. One is `if_none.py`, which contains all the mathematical functions to compute the various daily attributes, with lots of exceptions for handling nones and nulls and NaN's and all of that. The other is `daily_functions.py`, which essentially contains 3 tools for mapping the `if_none` functions onto a stream of data or multiple streams of data, and matching up dates and date times if necessary. There are really 4 forms of mapping -- "normal", which is one function to one stream of data, "VPD" which needs to have specific airtemp and relhum prefixes, "wind" which may have two attributes of speed and direction, or just one of direction, and "sonic", which needs the same functions as "wind", but has more outputs explicitly processed and therefore doesn't have the same sources.
 
 
 More information later!
