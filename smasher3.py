@@ -1218,7 +1218,7 @@ if __name__ == "__main__":
     # smashed template is the basic daily structure to populate
     raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     # perform daily calculations -- temporary smash is created within the function and then populated with each column that we can populate it with -- it is grouped by attribute, like {`AIRTEMP_MEAN_DAY`:{`date`:{`PROBE_CODE`: value}}}
     temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 

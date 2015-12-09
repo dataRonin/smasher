@@ -88,28 +88,28 @@ elif len(sys.argv) == 3:
 	print("Processing all data available for " + desired_database + desired_daily_entity)
 
 	desired_start_day, desired_end_day = detect_recent_data(cur, desired_database, desired_daily_entity, daily_index)
-	if desired_start_day == "" and desired_end_day = "":
+	if desired_start_day == "" and desired_end_day == "":
 		print("Not able to find start and ending dates or date_times in either the high_resolution or daily data")
 		sys.exit("Check the SQL server that high-resolution data exists for " + desired_database + daily_index[desired_database][desired_daily_entity])
 	else:
 		raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
 		# perform daily calculations -- temporary smash is created within the function and then populated with each column that we can populate it with -- it is grouped by attribute, like {`AIRTEMP_MEAN_DAY`:{`date`:{`PROBE_CODE`: value}}}
-	    temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
+		temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
 	    # calculate daily flags by creating 'flag_counters' which indicate the number of unique flags. It is organized by attribute, like {`AIRTEMP_MEAN_FLAG`:{`date`:{`PROBE_CODE`: flag}}}
-	    temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
+		temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
 	    # creates output structure containing both the data and the flags
-	    smashed_data = unite_data(temporary_smash, temporary_flags)
+		smashed_data = unite_data(temporary_smash, temporary_flags)
 
 	    # reorganizes the output structure from being organized by attribute, to being organized by probe. cleans up little things like VPD MINTIME, WINDROSE, converting "M" to "A" for when the max column could be found from the mean, etc.
-	    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
+		output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 	    # Insertion into SQL server.
-	    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+		insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
 
-	    print("finished smashing daily for " + desired_database + desired_daily_entity)
+		print("finished smashing daily for " + desired_database + desired_daily_entity)
 
 elif len(sys.argv) == 2:
 	desired_database = sys.argv[1]
@@ -121,7 +121,7 @@ elif len(sys.argv) == 2:
 	for desired_daily_entity in sorted(list(daily_index[desired_database].keys())):
 		desired_start_day, desired_end_day = detect_recent_data(cur, desired_database, desired_daily_entity, daily_index)
 
-		if desired_start_day == "" and desired_end_day = "":
+		if desired_start_day == "" and desired_end_day == "":
 			print("Not able to find start and ending dates or date_times in either the high_resolution or daily data")
 			print("Check the SQL server that high-resolution data exists for " + desired_database + daily_index[desired_database][desired_daily_entity])
 			continue
@@ -129,34 +129,34 @@ elif len(sys.argv) == 2:
 			raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
 			# perform daily calculations -- temporary smash is created within the function and then populated with each column that we can populate it with -- it is grouped by attribute, like {`AIRTEMP_MEAN_DAY`:{`date`:{`PROBE_CODE`: value}}}
-		    temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
+			temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
 		    # calculate daily flags by creating 'flag_counters' which indicate the number of unique flags. It is organized by attribute, like {`AIRTEMP_MEAN_FLAG`:{`date`:{`PROBE_CODE`: flag}}}
-		    temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
+			temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
 		    # creates output structure containing both the data and the flags
-		    smashed_data = unite_data(temporary_smash, temporary_flags)
+			smashed_data = unite_data(temporary_smash, temporary_flags)
 
 		    # reorganizes the output structure from being organized by attribute, to being organized by probe. cleans up little things like VPD MINTIME, WINDROSE, converting "M" to "A" for when the max column could be found from the mean, etc.
-		    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
+			output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 		    # Insertion into SQL server.
-		    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+			insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
 
-		    print("...cleaning up variables...")
+			print("...cleaning up variables...")
 
-		    del output_dictionary
-		    del smashed_data
-		    del temporary_smash
-		    del temporary_flags
-		    del column_names
-		    del smashed_template
-		    del temporary_flags
-		    del xt
-		    del desired_start_day
-		    del desired_end_day
+			del output_dictionary
+			del smashed_data
+			del temporary_smash
+			del temporary_flags
+			del column_names
+			del smashed_template
+			del temporary_flags
+			del xt
+			del desired_start_day
+			del desired_end_day
 
-		    print("finished smashing daily for " + desired_database + desired_daily_entity)
+			print("finished smashing daily for " + desired_database + desired_daily_entity)
 
 elif len(sys.argv) == 1:
 	desired_start_day = ""
@@ -170,7 +170,7 @@ elif len(sys.argv) == 1:
 		for desired_daily_entity in sorted(list(daily_index[desired_database].keys())):
 			desired_start_day, desired_end_day = detect_recent_data(cur, desired_database, desired_daily_entity, daily_index)
 
-			if desired_start_day == "" and desired_end_day = "":
+			if desired_start_day == "" and desired_end_day == "":
 				print("Not able to find start and ending dates or date_times in either the high_resolution or daily data")
 				print("Check the SQL server that high-resolution data exists for " + desired_database + daily_index[desired_database][desired_daily_entity])
 				continue
@@ -179,19 +179,19 @@ elif len(sys.argv) == 1:
 				raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
 				# perform daily calculations -- temporary smash is created within the function and then populated with each column that we can populate it with -- it is grouped by attribute, like {`AIRTEMP_MEAN_DAY`:{`date`:{`PROBE_CODE`: value}}}
-			    temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
+				temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
 			    # calculate daily flags by creating 'flag_counters' which indicate the number of unique flags. It is organized by attribute, like {`AIRTEMP_MEAN_FLAG`:{`date`:{`PROBE_CODE`: flag}}}
-			    temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
+				temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
 			    # creates output structure containing both the data and the flags
-			    smashed_data = unite_data(temporary_smash, temporary_flags)
+				smashed_data = unite_data(temporary_smash, temporary_flags)
 
 			    # reorganizes the output structure from being organized by attribute, to being organized by probe. cleans up little things like VPD MINTIME, WINDROSE, converting "M" to "A" for when the max column could be found from the mean, etc.
-			    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
+				output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 			    # Insertion into SQL server.
-			    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+				insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
 
 				print("...cleaning up variables...")
 
