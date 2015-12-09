@@ -54,9 +54,21 @@ def daily_functions_vpd(raw_data, vpd_list, valid_columns, function_choice, xt):
                 data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt][airtemp_data], raw_data[each_probe][dt][relhum_data], ind=True) != None} for each_probe in raw_data.keys()}
             except Exception:
                 try:
-                    data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1] != None and function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True) != 'None'} for each_probe in raw_data.keys()}
+                    data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1] != None} for each_probe in raw_data.keys()}
                 except Exception:
-                    import pdb; pdb.set_trace()
+                    try:
+                        data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if str(function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1])!= 'None'} for each_probe in raw_data.keys()}
+                    except Exception:
+                        try:
+                            data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if str(function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True))!= 'None'} for each_probe in raw_data.keys()}
+                        except Exception:
+                            try:
+                                data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True) != None} for each_probe in raw_data.keys()}
+                            except Exception:
+                                try:
+                                    data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[0] != None} for each_probe in raw_data.keys()}
+                                except Exception:
+                                    data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[1]] for dt in raw_data[each_probe].keys() if str(function_choice(raw_data[each_probe][dt]['AIRTEMP_MEAN'], raw_data[each_probe][dt]['RELHUM_MEAN'], ind=True)[0]) != 'None'} for each_probe in raw_data.keys()}
 
             return data, data2
 
@@ -96,12 +108,35 @@ def daily_functions_normal(raw_data, column_name, function_choice, xt):
         elif xt == True:
 
             data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][column_name]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
-
             try:
                 data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
             except Exception:
-                # solar uses integers
-                data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(int(function_choice(raw_data[each_probe][dt][column_name]))))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+                try:
+                    data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(int(function_choice(raw_data[each_probe][dt][column_name]))))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+                except Exception:
+                    try:
+                        data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(round(function_choice(raw_data[each_probe][dt][column_name]))),2)] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+                    except Exception:
+                        try:
+                            data2 = {each_probe:{dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(round(function_choice(raw_data[each_probe][dt][column_name]))),3)] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+                        except Exception:
+                            try:
+                                data2 = {each_probe: {dt: raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))] for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+                            except Exception:
+                                data2 = {}
+                                for each_probe in sorted(list(raw_data.keys())):
+                                    for dt in sorted(list(raw_data[each_probe].keys())):
+                                        try:
+                                            new_value = raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))]
+                                        except Exception:
+                                            new_value = raw_data[each_probe][dt]['date_time'][[str(x).rstrip('0') for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))]
+                                        if each_probe not in data2:
+                                            data2[each_probe] = {dt: new_value}
+                                        elif each_probe in data2:
+                                            if dt not in data2[each_probe]:
+                                                data2[each_probe][dt] = new_value
+                                            elif dt in data2[each_probe]:
+                                                pass
 
             return data, data2
 
@@ -125,6 +160,18 @@ def daily_functions_speed_dir(raw_data, is_windpro, valid_columns, function_choi
         this_attribute = str(mag_cols)
 
     data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][speed_cols], raw_data[each_probe][dt][dir_cols]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
+
+    return data
+
+def daily_functions_speed_dir_snc(raw_data, speed_name, dir_name, function_choice):
+
+    """ For functions like wind that need both a speed and a direction
+    """
+
+    rounder = lambda x: round(x,3) if x != 'None' and x != None else None
+
+
+    data = {each_probe:{dt: function_choice(raw_data[each_probe][dt][speed_name], raw_data[each_probe][dt][dir_name]) for dt in raw_data[each_probe].keys()} for each_probe in raw_data.keys()}
 
     return data
 

@@ -255,12 +255,16 @@ def wind_mag_if_none(speed_list, dir_list):
 
 
 def wind_dir_if_none(speed_list, dir_list):
-    """ Computes the weighted wind speed, and needs both speed and direction.
+    """ Computes the weighted direction (by speed); needs both speed and direction.
     """
 
     num_valid = len([x for x in zip(speed_list,dir_list) if x[0] != None and x[1] != None])
 
-    theta_u = math.atan2(sum([float(speed) * math.sin(math.radians(float(direction))) for (speed, direction) in zip(speed_list, dir_list) if speed != 'None' and speed != None and direction != 'None' and direction != None])/num_valid, sum_if_none([float(speed) * math.cos(math.radians(float(direction))) for (speed, direction) in zip(speed_list,dir_list) if speed != 'None' and speed != None and direction != 'None' and direction !=None])/num_valid)
+    # if there are no valid directions given, there is no daily wind direction
+    try:
+        theta_u = math.atan2(sum([float(speed) * math.sin(math.radians(float(direction))) for (speed, direction) in zip(speed_list, dir_list) if speed != 'None' and speed != None and direction != 'None' and direction != None])/num_valid, sum_if_none([float(speed) * math.cos(math.radians(float(direction))) for (speed, direction) in zip(speed_list,dir_list) if speed != 'None' and speed != None and direction != 'None' and direction !=None])/num_valid)
+    except Exception:
+        return None
 
     daily_dir = round(math.degrees(theta_u),3)
 
@@ -278,6 +282,9 @@ def wind_std_if_none(dir_list):
 
     num_valid = len_if_none(dir_list)
 
+    if num_valid == 0 or dir_list == []:
+        return None
+
     daily_epsilon = math.sqrt(1-((sum([math.sin(math.radians(float(direction))) for direction in dir_list if direction != 'None' and direction != None])/num_valid)**2 + (sum([math.cos(math.radians(float(direction))) for direction in dir_list if direction != 'None' and direction != None])/num_valid)**2))
 
     daily_sigma_theta = math.degrees(math.asin(daily_epsilon)*(1+(2./math.sqrt(3))-1)*daily_epsilon)
@@ -289,3 +296,31 @@ def wind_std_if_none(dir_list):
         daily_sigma_theta = round(daily_sigma_theta,3)
 
     return daily_sigma_theta
+
+def regular_std_if_none(data_list):
+    """ Computes the regular kind of standard deviation
+    """
+
+    # round x to two decimal places
+    rounder = lambda x: round(x,2)
+
+    try:
+        daily_mean = mean_if_none(data_list)
+        squares = []
+        if daily_mean != None:
+            for each_value in data_list:
+                if str(each_value) != 'None':
+                    squares.append((float(each_value) - daily_mean)**2)
+                elif str(each_value)== 'None':
+                    pass
+
+        if squares == []:
+            return None
+        else:
+            num_valid_obs = len(squares)
+            std = math.sqrt(sum(squares)/num_valid_obs)
+            return std
+
+    except Exception:
+        return None
+

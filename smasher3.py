@@ -10,7 +10,7 @@ from daily_functions import *
 
 
 def isfloat(string):
-    """ From an single input, returns either a float or a None """
+    """ From an single input, returns either a float or a None. """
     try:
         return float(string)
     except Exception:
@@ -122,6 +122,8 @@ def daily_flag(flag_counter, critical_value, critical_flag):
     """ Figure out what the daily flag is based on the outputs of the flag counter.
 
     If the number of E's is more than 0.05 it's an E, otherwise if the number of Q's is greater than 0.05 it's a Q, otherwise if the number of M is more than 0.2, than the value is 'M', otherwise if E and M and Q sum to more than 0.05, it's Q, and in all other cases it's A.
+
+    If the number of flags in the day is much more than the accepted number of flags for the day, just return the acceptable value. This really only happens on CENMET when the 15 goes to 5 as far as I can tell.
     """
 
     if flag_counter[critical_flag] >= critical_value:
@@ -178,7 +180,7 @@ def select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, d
         ed = args[1]
 
     else:
-        print("no args!")
+        print("No start date or end date could be determined!")
 
     # get the entity number of the high resolution entity and the column' names that go with it
     hr_entity = daily_index[dbcode][daily_entity]
@@ -287,7 +289,7 @@ def process_data(cur, dbcode, hr_entity, initial_column_names, hr_methods, daily
     # remove informational columns from the original list. Note that we hardcoded in these "worthless" columns. If more are needed, append here. These columns are added into the final output after the method table is linked in so that the height, method, and sitecode are referenced from there.
     columns_worthless = ['DBCODE', 'ENTITY','EVENT_CODE','SITECODE','QC_LEVEL','ID','HEIGHT','DEPTH']
 
-    # remove worthless columns from the original list
+    # remove `worthless` columns from the original list
     for each_column in columns_worthless:
         try:
             initial_column_names.remove(each_column)
@@ -582,7 +584,7 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
         temporary_smash.update({day_attribute(dir_dev_name) : mean_stddev})
 
     # if it contains sonic, it should say 'SNC' -- remove all but max
-    is_windsnc = [x for x in data_columns if 'SNC' in x]
+    is_windsnc = [x for x in data_columns if 'SNC' in x and 'SPD' not in x]
 
     for each_column in is_windsnc:
         valid_columns.remove(each_column)
@@ -591,26 +593,26 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
         # regular mean
         columns_for_a_regular_mean = [x for x in is_windsnc if 'DIR' not in x and 'STDDEV' not in x and 'MAX' not in x]
         # mean for all the mean stuff
-        mean_data_from_mean_snc, _ = daily_functions_normal(raw_data, columns_for_a_regular_mean, mean_if_none, xt)
-
-        # max only on speed
-        columns_for_a_max = [x for x in is_windsnc if 'MAX' in x]
-        # max for the mean if we need it
-        max_data_from_max_snc, maxtime_from_max_snc = daily_functions(raw_data, columns_for_a_max, max_if_none, xt)
-
-        # max from mean only on speed
-        columns_for_max_speed_from_mean =[x.rstrip('_MAX') + '_MEAN' for x in columns_for_a_max]
-
-        # max for the mean if we need it
-        max_data_from_mean_snc, maxtime_from_mean_snc = daily_functions(raw_data, columns_for_max_speed_from_mean, max_if_none, xt)
-
-        # fix the max if it's missing to be computed from the mean
-        max_data_from_max_snc, maxtime_from_max_snc = matching_min_or_max(max_data_from_max_snc, max_data_from_mean_snc, maxtime_from_max_snc, maxtime_from_mean_snc, xt, is_max, valid_columns, extrema_key="_MAX")
+        for each_column in columns_for_a_regular_mean:
+            mean_data_from_mean_snc, _ = daily_functions_normal(raw_data, each_column, mean_if_none, xt)
+            temporary_smash.update({day_attribute(each_column): mean_data_from_mean_snc})
 
         columns_for_deviation = [x for x in is_windsnc if 'STDDEV' in x and 'DIR' not in x]
         columns_for_dir_deviation = [x for x in is_windsnc if 'DIR' in x and 'STDDEV' not in x]
 
-        wind_std_snc, _ = daily_functions(raw_data, columns_for_dir_deviation, wind_std_if_none, xt)
+        for each_column in columns_for_deviation:
+            wind_std_others, _ = daily_functions_normal(raw_data, each_column, regular_std_if_none, xt)
+            temporary_smash.update({'WDIR_SNC_STDDEV_DAY': wind_std_others})
+
+        for each_column in columns_for_dir_deviation:
+
+            wind_std_snc, _ = daily_functions_normal(raw_data, each_column, wind_std_if_none, xt)
+            temporary_smash.update({day_attribute(each_column): wind_std_snc})
+            mean_direction = daily_functions_speed_dir_snc(raw_data, 'WSPD_SNC_MEAN', each_column, wind_dir_if_none)
+
+            temporary_smash.update({day_attribute(each_column): mean_direction})
+            #mean_stddev, _ = daily_functions_normal(raw_data, each_column, wind_std_if_none, xt)
+            #temporary_smash.update({day_attribute(each_column): mean_stddev})
 
     # if it says 'TOT' its a total
     is_tot = [x for x in data_columns if 'TOT' in x and 'MEAN' not in x]
@@ -624,46 +626,48 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     for each_column in is_inst:
         valid_columns.remove(each_column)
 
+
     # for the VPD --> (the daily aggregation functions are in `daily_functions.py`)
     do_vpd = [x for x in data_columns if 'VPD' in x]
     do_vap = [x for x in data_columns if 'VAP' in x]
 
     if do_vpd != []:
 
-        # mean vapor pressure
+        # mean vapor pressure - from the mean
         mean_vap_data_from_mean, _ = daily_functions_vpd(raw_data, do_vap, valid_columns, vap_if_none, xt)
         temporary_smash.update({'VAP_MEAN_DAY':mean_vap_data_from_mean})
 
-        # max vapor
+        # max vapor pressure - from the mean
         max_vap_data_from_mean, maxtime_vap_from_mean = daily_functions_vpd(raw_data, do_vap, valid_columns, max_vap_if_none, xt)
         temporary_smash.update({'VAP_MAX_DAY': max_vap_data_from_mean})
         time_name = time_attribute(max_vap_if_none)
         temporary_smash.update({time_name : maxtime_vap_from_mean})
 
-        # min vapor
+        # min vapor pressure - from the mean
         min_vap_data_from_mean, mintime_vap_from_mean = daily_functions_vpd(raw_data, do_vap, valid_columns, min_vap_if_none, xt)
         temporary_smash.update({'VAP_MIN_DAY': min_vap_data_from_mean})
         time_name = time_attribute(min_vap_if_none)
         temporary_smash.update({time_name : mintime_vap_from_mean})
 
-        # mean vpd
+        # mean vpd - from the mean
         mean_vpd_data_from_mean, _ = daily_functions_vpd(raw_data, do_vpd, valid_columns, vpd_if_none, xt)
         temporary_smash.update({'VPD_MEAN_DAY':mean_vpd_data_from_mean})
 
-        # max vpd
+        # max vpd - from the mean
         max_vpd_data_from_mean, maxtime_vpd_from_mean = daily_functions_vpd(raw_data, do_vpd, valid_columns, max_vpd_if_none, xt)
         temporary_smash.update({'VPD_MAX_DAY': max_vpd_data_from_mean})
         time_name = time_attribute(max_vpd_if_none)
         temporary_smash.update({time_name : maxtime_vpd_from_mean})
 
-        # min vpd
+        # min vpd - from the mean
         min_vpd_data_from_mean, mintime_vpd_from_mean = daily_functions_vpd(raw_data, do_vpd, valid_columns, min_vpd_if_none, xt)
         temporary_smash.update({'VPD_MIN_DAY': min_vpd_data_from_mean})
         time_name = time_attribute(min_vpd_if_none)
         temporary_smash.update({time_name : mintime_vpd_from_mean})
 
 
-    # Here the re-aggregation begins -->
+    # Here the re-aggregation begins for means, mins, and maxes...
+
     # if the mean isn't empty, mean from mean - will still show all the decimals
     if do_vpd == [] and valid_columns != []:
 
@@ -672,13 +676,16 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
             mean_data_from_mean, _ = daily_functions_normal(raw_data, each_column, mean_if_none, xt)
             temporary_smash.update({day_attribute(each_column) : mean_data_from_mean})
 
-
             max_name = each_column.split("_")[0] + "_MAX_DAY"
             min_name = each_column.split("_")[0] + "_MIN_DAY"
 
             if is_windpro != []:
                 max_name = each_column.split("_")[0] + "_PRO_MAX_DAY"
                 min_name = each_column.split("_")[0] + "_PRO_MIN_DAY"
+
+            if is_windsnc != []:
+                max_name = each_column.split("_")[0] + "_SNC_MAX_DAY"
+                min_name = each_column.split("_")[0] + "_SNC_MIN_DAY"
 
             # maximums from mean
             if max_name in smashed_template.keys() and xt == True:
@@ -716,7 +723,6 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
     if is_max != []:
 
         for each_max_column in is_max:
-
             max_data_from_max, maxtime_from_max = daily_functions_normal(raw_data, each_max_column, max_if_none, xt)
 
             old_column = each_max_column + "_DAY"
@@ -873,13 +879,25 @@ def fix_max_min(smashed_data, raw_data, prefix="MAX"):
 
     return smashed_data
 
-def clean_up_data(output_dictionary):
+def clean_up_data(output_dictionary, xt):
     """ If the data is `present` because it has been calculated but in fact it should be none because it is missing, set that data to None
     """
     for each_probe in sorted(list(output_dictionary.keys())):
         for each_date in sorted(list(output_dictionary[each_probe].keys())):
 
             this_list = sorted(list(output_dictionary[each_probe][each_date].keys()))
+
+            # stupid vpd bug - won't output a null
+            if 'VPD' in each_probe and 'VPD_MINTIME' not in this_list:
+                output_dictionary[each_probe][each_date]['VPD_MINTIME'] = 'None'
+            else:
+                pass
+
+            if 'VPD' in each_probe and 'VPD_MAXTIME' not in this_list:
+                output_dictionary[each_probe][each_date]['VPD_MAXTIME'] = 'None'
+            else:
+                pass
+
 
             for each_attribute in this_list:
                 if 'MAXTIME' in each_attribute or 'MINTIME' in each_attribute:
@@ -913,7 +931,7 @@ def windrose_fix(output_dictionary):
 
     return output_dictionary
 
-def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
+def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity,xt):
     """ Generate appropriate output structures - first get the data together and then get the information with it.
     """
     output_dictionary = {}
@@ -961,7 +979,7 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity):
                             pass
 
     # a function that turns the date times from the min and max to characters
-    output_dictionary = clean_up_data(output_dictionary)
+    output_dictionary = clean_up_data(output_dictionary, xt)
 
 
     if daily_entity == '04':
@@ -1137,7 +1155,7 @@ def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity, smash
 
     conn.commit()
 
-def detect_recent_data(cur, dbcode, daily_entity):
+def detect_recent_data(cur, dbcode, daily_entity, daily_index):
     """ Detect the most recent dt in the daily data before updating. Does not return a start date if there's not one in there.
     """
 
@@ -1145,15 +1163,24 @@ def detect_recent_data(cur, dbcode, daily_entity):
         sql= "select top 1 date from lterlogger_pro.dbo." + dbcode + daily_entity + " order by date desc"
         cur.execute(sql)
         last_date = cur.fetchone()
+
+        if last_date == None:
+            print("no data has been entered yet, get full range of high-resolution data")
+            hr_entity = daily_index[dbcode][daily_entity]
+            sql= "select top 1 date_time from lterlogger_pro.dbo." + dbcode + hr_entity + " order by date_time asc"
+            cur.execute(sql)
+            last_date = cur.fetchone()
+
         desired_start_date = datetime.datetime.strftime(last_date[0] + datetime.timedelta(days=1),'%Y-%m-%d %H:%M:%S')
 
-        today = (datetime.datetime.now().year, datetime.datetime.now().month, datetime.datetime.now().day)
+        today = datetime.datetime(datetime.datetime.now().year, datetime.datetime.now().month, datetime.datetime.now().day, 0, 0, 0)
         desired_end_day = datetime.datetime.strftime(today, '%Y-%m-%d %H:%M:%S')
 
         return desired_start_date, desired_end_day
+
     except Exception:
         print("no data found, beginning with water year")
-        return ""
+        return "",""
 
 
 if __name__ == "__main__":
@@ -1177,31 +1204,34 @@ if __name__ == "__main__":
     hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
-    desired_database = 'MS043'
-    desired_daily_entity = '21'
-    desired_start_day = '2014-10-31 00:00:00'
-    desired_end_day = '2015-04-10 00:00:00'
+    desired_database = 'MS005'
+    desired_daily_entity = '01'
+    desired_start_day = '2015-01-01 00:00:00'
+    desired_end_day = '2015-07-10 00:00:00'
 
     if desired_daily_entity == '06' and desired_database == 'MS043':
         print("soil moisture potential - 06 and 16 - is not valid currently")
 
-    # returns are the names of the columns in the
+    # raw_data is the data as {`PROBE CODE`:{`date`:{`attribute`:[value1, value2, value3, etc.]}}}
+    # column names are the columns of high resolution data
+    # xt is an indicator for if the maxtime or mintime needs to be computed
+    # smashed template is the basic daily structure to populate
     raw_data, column_names, xt, smashed_template = select_raw_data(cur, database_map, daily_index, hr_methods, daily_methods, desired_database, desired_daily_entity, desired_start_day, desired_end_day)
 
-    # perform daily calculations
+    import pdb; pdb.set_trace()
+    # perform daily calculations -- temporary smash is created within the function and then populated with each column that we can populate it with -- it is grouped by attribute, like {`AIRTEMP_MEAN_DAY`:{`date`:{`PROBE_CODE`: value}}}
     temporary_smash = comprehend_daily(smashed_template, raw_data, column_names, xt)
 
-    # calculate daily flags
+    # calculate daily flags by creating 'flag_counters' which indicate the number of unique flags. It is organized by attribute, like {`AIRTEMP_MEAN_FLAG`:{`date`:{`PROBE_CODE`: flag}}}
     temporary_flags = calculate_daily_flags(raw_data, column_names, temporary_smash, smashed_template)
 
-    # create some output structure containing both the data and the flags
+    # creates output structure containing both the data and the flags
     smashed_data = unite_data(temporary_smash, temporary_flags)
 
-    #import pdb; pdb.set_trace()
+    # reorganizes the output structure from being organized by attribute, to being organized by probe. cleans up little things like VPD MINTIME, WINDROSE, converting "M" to "A" for when the max column could be found from the mean, etc.
+    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
-    output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity)
-
-
+    # Insertion into SQL server.
     insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
 
     print("the end")
