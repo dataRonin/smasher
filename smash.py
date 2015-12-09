@@ -151,7 +151,6 @@ elif len(sys.argv) == 2:
 			del temporary_flags
 			del column_names
 			del smashed_template
-			del temporary_flags
 			del xt
 			del desired_start_day
 			del desired_end_day
@@ -201,7 +200,6 @@ elif len(sys.argv) == 1:
 				del temporary_flags
 				del column_names
 				del smashed_template
-				del temporary_flags
 				del xt
 				del desired_start_day
 				del desired_end_day
