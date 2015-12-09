@@ -1121,7 +1121,7 @@ def get_methods_for_all_probes(cur, *sd):
 
     return hr_methods, daily_methods
 
-def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity, smashed_template):
+def insert_data(cur, output_dictionary, daily_index, dbcode, daily_entity, smashed_template, conn):
     """ Create a SQL statement for inserting your data back into the database.
 
     The `var_types` variable uses the meta-information about the variable to figure out what type to assign it in the database.
@@ -1232,6 +1232,6 @@ if __name__ == "__main__":
     output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
     # Insertion into SQL server.
-    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+    insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
     print("the end")

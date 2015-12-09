@@ -46,7 +46,7 @@ if len(sys.argv) == 5:
 	output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 	# Insertion into SQL server.
-	insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+	insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
 	print("finished smashing daily for " + desired_database + desired_daily_entity)
 
@@ -76,7 +76,7 @@ elif len(sys.argv) == 4:
 	output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 	# Insertion into SQL server.
-	insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+	insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
 	print("finished smashing daily for " + desired_database + desired_daily_entity)
 
@@ -107,7 +107,7 @@ elif len(sys.argv) == 3:
 		output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 	    # Insertion into SQL server.
-		insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+		insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
 		print("finished smashing daily for " + desired_database + desired_daily_entity)
 
@@ -141,7 +141,7 @@ elif len(sys.argv) == 2:
 			output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 		    # Insertion into SQL server.
-			insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+			insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
 			print("...cleaning up variables...")
 
@@ -191,7 +191,7 @@ elif len(sys.argv) == 1:
 				output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
 
 			    # Insertion into SQL server.
-				insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template)
+				insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
 
 				print("...cleaning up variables...")
 
