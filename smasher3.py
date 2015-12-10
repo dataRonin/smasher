@@ -59,6 +59,10 @@ def is_daily(database_map):
         # sort the entities within so that it's faster to find the matches, since they are in similar order.
         for each_entity in sorted(database_map[each_dbcode].keys()):
 
+            # skip over snow depth / swe for now
+            if each_dbcode == 'MS043' and each_entity in ['10', '30']:
+                continue
+
             # number that we switch to daily
             critical_value = 10
 
@@ -674,7 +678,12 @@ def comprehend_daily(smashed_template, raw_data, column_names, xt):
         # normal data
         for each_column in valid_columns:
             mean_data_from_mean, _ = daily_functions_normal(raw_data, each_column, mean_if_none, xt)
-            temporary_smash.update({day_attribute(each_column) : mean_data_from_mean})
+
+            # for snow depth
+            if "SNOWDEP" in each_column:
+                temporary_smash.update({'SNOWDEP_DAY': mean_data_from_mean})
+            else:
+                temporary_smash.update({day_attribute(each_column) : mean_data_from_mean})
 
             max_name = each_column.split("_")[0] + "_MAX_DAY"
             min_name = each_column.split("_")[0] + "_MIN_DAY"
@@ -1204,9 +1213,9 @@ if __name__ == "__main__":
     hr_methods, daily_methods = get_methods_for_all_probes(cur)
 
     ## Required inputs: database and daily table desired, start and end dates of aggregation (or determine from what is there)
-    desired_database = 'MS005'
-    desired_daily_entity = '01'
-    desired_start_day = '2015-01-01 00:00:00'
+    desired_database = 'MS043'
+    desired_daily_entity = '10'
+    desired_start_day = '2014-01-01 00:00:00'
     desired_end_day = '2015-07-10 00:00:00'
 
     if desired_daily_entity == '06' and desired_database == 'MS043':
@@ -1228,8 +1237,11 @@ if __name__ == "__main__":
     # creates output structure containing both the data and the flags
     smashed_data = unite_data(temporary_smash, temporary_flags)
 
+
+    import pdb; pdb.set_trace()
     # reorganizes the output structure from being organized by attribute, to being organized by probe. cleans up little things like VPD MINTIME, WINDROSE, converting "M" to "A" for when the max column could be found from the mean, etc.
     output_dictionary = create_outs(raw_data, smashed_template, smashed_data, desired_database, desired_daily_entity, xt)
+
 
     # Insertion into SQL server.
     insert_data(cur, output_dictionary, daily_index, desired_database, desired_daily_entity, smashed_template, conn)
