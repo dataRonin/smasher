@@ -55,7 +55,6 @@ def is_daily(database_map):
 
     for each_dbcode in database_map.keys():
 
-
         # sort the entities within so that it's faster to find the matches, since they are in similar order.
         for each_entity in sorted(database_map[each_dbcode].keys()):
 
@@ -921,7 +920,7 @@ def clean_up_data(output_dictionary, xt):
 
     return output_dictionary
 
-def windrose_fix(output_dictionary):
+def windrose_fix(output_dictionary, smashed_template):
     """ If there are windrose flags in the data, set them to 'M' """
 
     # check for wind rose columns and return if there aren't any
@@ -968,6 +967,8 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity,x
 
         for each_probe in list_of_probes:
             list_of_dates = sorted(list(smashed_data[each_attribute][each_probe].keys()))
+            # remove the final date
+            list_of_dates.pop()
 
             for each_date in list_of_dates:
                 this_value = smashed_data[each_attribute][each_probe][each_date]
@@ -992,7 +993,7 @@ def create_outs(raw_data, smashed_template, smashed_data, dbcode, daily_entity,x
 
 
     if daily_entity == '04':
-        output_dictionary = windrose_fix(output_dictionary)
+        output_dictionary = windrose_fix(output_dictionary, smashed_template)
 
     is_probe = [x for x in smashed_template.keys() if 'PROBE' in x][0]
     is_method = [x for x in smashed_template.keys() if 'METHOD' in x][0]
@@ -1174,7 +1175,7 @@ def detect_recent_data(cur, dbcode, daily_entity, daily_index):
         last_date = cur.fetchone()
 
         if last_date == None:
-            print("no data has been entered yet, get full range of high-resolution data")
+            #print("no data has been entered yet, get full range of high-resolution data")
             hr_entity = daily_index[dbcode][daily_entity]
             sql= "select top 1 date_time from lterlogger_pro.dbo." + dbcode + hr_entity + " order by date_time asc"
             cur.execute(sql)
@@ -1188,7 +1189,7 @@ def detect_recent_data(cur, dbcode, daily_entity, daily_index):
         return desired_start_date, desired_end_day
 
     except Exception:
-        print("no data found, beginning with water year")
+        #print("no data found, beginning with water year")
         return "",""
 
 

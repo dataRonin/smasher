@@ -129,7 +129,20 @@ def daily_functions_normal(raw_data, column_name, function_choice, xt):
                                         try:
                                             new_value = raw_data[each_probe][dt]['date_time'][[str(x) for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))]
                                         except Exception:
-                                            new_value = raw_data[each_probe][dt]['date_time'][[str(x).rstrip('0') for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))]
+                                            try:
+                                                new_value = raw_data[each_probe][dt]['date_time'][[str(x).rstrip('0') for x in raw_data[each_probe][dt][column_name]].index(str(function_choice(raw_data[each_probe][dt][column_name])))]
+                                            except Exception:
+                                                try:
+                                                    new_value = raw_data[each_probe][dt]['date_time'][[str(int(x)) for x in raw_data[each_probe][dt][column_name]].index(str(int(function_choice(raw_data[each_probe][dt][column_name]))))]
+                                                except Exception:
+                                                    try:
+                                                        new_value = raw_data[each_probe][dt]['date_time'][[str(x).rstrip('0').rstrip('.') for x in raw_data[each_probe][dt][column_name]].index(str(int(function_choice(raw_data[each_probe][dt][column_name]))))]
+                                                    except Exception:
+                                                        if str(function_choice(raw_data[each_probe][dt][column_name])) == 'None':
+                                                            new_value = None
+                                                        else:
+                                                            print("Error finding matching max or min time for " + datetime.datetime.strftime(dt, '%Y-%m-%d') + " on probe " + each_probe + " for data in " + column_name)
+
                                         if each_probe not in data2:
                                             data2[each_probe] = {dt: new_value}
                                         elif each_probe in data2:
